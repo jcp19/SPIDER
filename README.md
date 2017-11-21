@@ -7,7 +7,7 @@ Minha checker provides automated distributed data race detection for Minha via S
 
 Edit configuration file `/src/main/resources/checker.racedetection.properties` as follows:
 - **event-file** should indicate the path to the file containing the events captured at runtime. By default, this should point to `minhaTRACER.log`.
-- **solver-bin** should indicate the path to the solver binary. By default, this should point to `lib/z3_4.4.1`.
+- **solver-bin** should indicate the path to the solver binary. By default, this should point to `lib/z3_4.4.1`. *NOTE: The solver binaries in this repo refer to a version of Z3 compiled for MacOS. For different operating systems, please check the [official site](https://github.com/Z3Prover/z3).*
 
 ### Usage
 **1. Compile:**
