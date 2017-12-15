@@ -6,12 +6,17 @@ package pt.minha.checker.events;
 public class Event {
     String thread;
     EventType type;
+    int id;
+
+    //Allows for total order between events
+    static int count = 0;
 
     public Event(){}
 
     public Event(String thread, EventType type) {
         this.thread = thread;
         this.type = type;
+        this.id = ++count;
     }
 
     public String getThread() {
@@ -28,6 +33,14 @@ public class Event {
 
     public void setType(EventType type) {
         this.type = type;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     @Override
