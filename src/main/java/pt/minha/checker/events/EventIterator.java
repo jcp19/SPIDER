@@ -1,9 +1,15 @@
 package pt.minha.checker.events;
 
+/**
+ * Created by joaopereira
+ */
+
 import java.util.*;
 
 public class EventIterator implements Iterator<Event>{
     private PriorityQueue<MyPair<Iterator<Event>, Event>> eventHeap;
+    //keeps track of the last Iterator next'd for the remove method
+    private Iterator<Event> lastIt;
 
     public final Comparator<MyPair<Iterator<Event>,Event>> heapOrder = new Comparator<MyPair<Iterator<Event>, Event>>() {
         //doesnt support null arguments
@@ -37,6 +43,7 @@ public class EventIterator implements Iterator<Event>{
 
         Iterator<Event> it = heapTop.getFirst();
         Event next = heapTop.getSecond();
+        lastIt = it;
 
         if(it.hasNext()) {
             Event toInsert = it.next();
@@ -46,6 +53,10 @@ public class EventIterator implements Iterator<Event>{
     }
 
     public void remove() {
-        //Not implemented
+        if(lastIt == null) {
+            throw new IllegalStateException();
+        }
+        lastIt.remove();
+        lastIt = null;
     }
 }
