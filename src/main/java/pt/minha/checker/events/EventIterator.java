@@ -26,7 +26,7 @@ public class EventIterator implements Iterator<Event>{
     }
 
     public boolean hasNext() {
-        return eventHeap.isEmpty();
+        return !eventHeap.isEmpty();
     }
 
     public Event next() {
