@@ -6,6 +6,7 @@ import pt.minha.checker.events.*;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -30,6 +31,14 @@ public class MinhaCheckerParallel {
     public static Map<String, List<ThreadSyncEvent>> joinSet;              //Map: thread -> list of thread's join events
     public static HashSet<MyPair<RWEvent,RWEvent>> conflictCandidates;
 
+    //Redundancy Elimination structures
+    //Map: thread id -> list of he ids of the messages in the concurrency context
+    public static Map<String, List<Long>> concurrencyContexts;
+    //Map: location -> concurreny history of that location (set of message ids)
+    public static Map<String, List<Long>> concurrencyHistories;
+    // Map: location, thread -> stack
+    public static Map<MyPair<String, String>, Stack<Event>> stacks;
+
     //solver stuff
     public static Solver solver;
 
@@ -42,6 +51,11 @@ public class MinhaCheckerParallel {
         joinSet = new HashMap<String, List<ThreadSyncEvent>>();
         conflictCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
 
+        //Redundancy-check related initializations
+        concurrencyContexts = new HashMap<String, List<Long>>();
+        concurrencyHistories = new HashMap<String, List<Long>>();
+        stacks = new HashMap<MyPair<String, String>, Stack<Event>>();
+
         try {
             String propFile = "checker.racedetection.properties";
             props = new Properties();
@@ -51,6 +65,9 @@ public class MinhaCheckerParallel {
 
                 //populate data structures
                 loadEvents();
+
+                //remove redundant events
+                //removeRedundantEvents();
 
                 //generate constraint model
                 initSolver();
@@ -71,6 +88,63 @@ public class MinhaCheckerParallel {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Inserts a value in a list associated with a key or creates the
+     * list if it doesnt exist already
+     */
+    public static <K,V> void insertInMapToLists(Map<K,List<V>> map, K key, V value) {
+        List<V> values_list = map.get(key);
+
+        if(values_list == null) {
+            values_list = new ArrayList<V>();
+            map.put(key, values_list);
+        }
+        values_list.add(value);
+    }
+
+    public static void removeRedundantEvents() {
+        // What I am assuming: the function getStack in ReX depends on teta-loc (and Gama-t?yes)
+        //                     Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
+
+        EventIterator events = new EventIterator(threadExecution.values());
+        while(events.hasNext()) {
+            Event e = events.next();
+            String thread = e.getThread();
+            EventType type = e.getType();
+
+            if(type == null)
+                throw new RuntimeException("EventType not known");
+
+            switch (type) {
+                //TODO: Add REL
+                //MEM Access
+                case READ:
+                case WRITE:
+                    RWEvent rwe = (RWEvent) e;
+                    if(checkRedundancy(rwe)) {
+                        //if an event is redundant, remove from the trace
+                        //TODO: remove from RWSet
+                        events.remove();
+                    }
+                    break;
+
+                case SND:
+                    SocketEvent se = (SocketEvent) e;
+                    insertInMapToLists(concurrencyContexts, thread, se.getMsgId());
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+    }
+
+    private static boolean checkRedundancy(Event event) {
+    //TODO: determine signature of method checkRedundancy
+        throw new NotImplementedException();
     }
 
     public static void loadEvents() throws IOException, JSONException {
