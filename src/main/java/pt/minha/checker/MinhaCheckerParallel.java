@@ -14,6 +14,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
+import static javax.swing.UIManager.get;
+import static pt.minha.checker.events.EventType.READ;
+
 /**
  * Created by nunomachado on 30/03/17.
  */
@@ -35,9 +38,12 @@ public class MinhaCheckerParallel {
     //Map: thread id -> list of he ids of the messages in the concurrency context
     public static Map<String, List<Long>> concurrencyContexts;
     //Map: location -> concurreny history of that location (set of message ids)
-    public static Map<String, List<Long>> concurrencyHistories;
-    // Map: location, thread -> stack
-    public static Map<MyPair<String, String>, Stack<Event>> stacks;
+    public static Map<Integer, List<Long>> concurrencyHistories;
+    //Map: location, thread -> stack of Threads
+    public static Map<MyPair<Integer, String>, Stack<String>> stacks;
+
+    //Set of threads whose concurrency context was changed
+    public static Set<String> changedConcurrencyContexts;
 
     //solver stuff
     public static Solver solver;
@@ -52,9 +58,10 @@ public class MinhaCheckerParallel {
         conflictCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
 
         //Redundancy-check related initializations
+        changedConcurrencyContexts = new HashSet<String>();
         concurrencyContexts = new HashMap<String, List<Long>>();
-        concurrencyHistories = new HashMap<String, List<Long>>();
-        stacks = new HashMap<MyPair<String, String>, Stack<Event>>();
+        concurrencyHistories = new HashMap<Integer, List<Long>>();
+        stacks = new HashMap<MyPair<Integer, String>, Stack<String>>();
 
         try {
             String propFile = "checker.racedetection.properties";
@@ -67,7 +74,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                //removeRedundantEvents();
+                removeRedundantEvents();
 
                 //generate constraint model
                 initSolver();
@@ -104,10 +111,24 @@ public class MinhaCheckerParallel {
         values_list.add(value);
     }
 
+    public static <K,V> void insertAllInMapToLists(Map<K,List<V>> map, K key, Collection<V> values) {
+        if(values == null){
+            return;
+        }
+        List<V> values_list = map.get(key);
+
+        if(values_list == null) {
+            values_list = new ArrayList<V>();
+            map.put(key, values_list);
+        }
+        values_list.addAll(values);
+    }
+
     public static void removeRedundantEvents() {
         // What I am assuming: the function getStack in ReX depends on teta-loc (and Gama-t?yes)
         //                     Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
 
+        int count = 0;
         EventIterator events = new EventIterator(threadExecution.values());
         while(events.hasNext()) {
             Event e = events.next();
@@ -123,28 +144,57 @@ public class MinhaCheckerParallel {
                 case READ:
                 case WRITE:
                     RWEvent rwe = (RWEvent) e;
-                    if(checkRedundancy(rwe)) {
+                    if(checkRedundancy(rwe, thread, rwe.getLoc())) {
                         //if an event is redundant, remove from the trace
-                        //TODO: remove from RWSet
                         events.remove();
+                        //remove from readSet and writeSet
+                        if(type == READ) {
+                            // wrong!! readSet.get(thread).remove(rwe);
+                        } else {
+                            // wrong!! writeSet.get(thread).remove(rwe);
+                        }
+                        count++;
                     }
                     break;
 
                 case SND:
                     SocketEvent se = (SocketEvent) e;
                     insertInMapToLists(concurrencyContexts, thread, se.getMsgId());
+                    //the concurrency context changed
+                    changedConcurrencyContexts.add(thread);
                     break;
 
                 default:
                     break;
             }
         }
+        System.out.println("Removed " + count + " redundant events.");
 
     }
 
-    private static boolean checkRedundancy(Event event) {
-    //TODO: determine signature of method checkRedundancy
-        throw new NotImplementedException();
+    private static boolean checkRedundancy(Event event, String thread, int loc) {
+        MyPair<Integer,String> key = new MyPair<Integer, String>(loc, thread);
+        Stack<String> stack = stacks.get(key);
+        if(stack == null || changedConcurrencyContexts.contains(thread)) {
+            //the stack is empty or the concurrency context of the thread was changed: in both
+            //cases, we need a new stack
+            stack = new Stack<String>();
+            stacks.put(key, stack);
+            stack.push(thread);
+            //TODO: concurrency history must be a set? and getStack must use its hashCode
+            //adds concurrency context of thread to concurrency history
+            insertAllInMapToLists(concurrencyHistories, loc, concurrencyContexts.get(thread));
+            //marks the concurrency of the thread as unchenaged if it isnt already
+            changedConcurrencyContexts.remove(thread);
+            return false;
+        } else if(stack.contains(thread) || stack.size() == 2) {
+            //if the stack already contains the thread or is full
+            return true;
+        } else {
+            //Stack has size 1 and does not contain the thread
+            stack.push(thread);
+            return false;
+        }
     }
 
     public static void loadEvents() throws IOException, JSONException {
@@ -205,7 +255,7 @@ public class MinhaCheckerParallel {
                 long counter = event.getLong("counter");
                 RWEvent rwe = new RWEvent(thread, type, loc, var, counter);
                 threadExecution.get(thread).add(rwe);
-                if(type == EventType.READ) {
+                if(type == READ) {
                     if(!readSet.containsKey(var)){
                         readSet.put(var,new LinkedList<RWEvent>());
                     }
