@@ -149,9 +149,9 @@ public class MinhaCheckerParallel {
                         events.remove();
                         //remove from readSet and writeSet
                         if(type == READ) {
-                            // wrong!! readSet.get(thread).remove(rwe);
+                            readSet.get(rwe.getVariable()).remove(rwe);
                         } else {
-                            // wrong!! writeSet.get(thread).remove(rwe);
+                            writeSet.get(rwe.getVariable()).remove(rwe);
                         }
                         count++;
                     }
