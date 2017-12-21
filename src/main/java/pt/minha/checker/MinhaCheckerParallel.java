@@ -38,8 +38,8 @@ public class MinhaCheckerParallel {
     //Map: thread id -> list of he ids of the messages in the concurrency context
     public static Map<String, List<Long>> concurrencyContexts;
     //Map: location -> concurreny history of that location (set of message ids)
-    public static Map<Integer, List<Long>> concurrencyHistories;
-    //Map: location, thread -> stack of Threads
+    public static Map<Integer, Set<Long>> concurrencyHistories;
+    //Map: hashCode(TETAlocation), thread -> stack of Threads
     public static Map<MyPair<Integer, String>, Stack<String>> stacks;
 
     //Set of threads whose concurrency context was changed
@@ -60,7 +60,7 @@ public class MinhaCheckerParallel {
         //Redundancy-check related initializations
         changedConcurrencyContexts = new HashSet<String>();
         concurrencyContexts = new HashMap<String, List<Long>>();
-        concurrencyHistories = new HashMap<Integer, List<Long>>();
+        concurrencyHistories = new HashMap<Integer, Set<Long>>();
         stacks = new HashMap<MyPair<Integer, String>, Stack<String>>();
 
         try {
@@ -75,6 +75,9 @@ public class MinhaCheckerParallel {
 
                 //remove redundant events
                 removeRedundantEvents();
+
+                printDataStructures();
+                //printRWSet();
 
                 //generate constraint model
                 initSolver();
@@ -97,6 +100,22 @@ public class MinhaCheckerParallel {
         }
     }
 
+    static void printRWSet() {
+        System.out.println("*** READ SET");
+        for(List<RWEvent> eventList : readSet.values()) {
+            for(RWEvent rwe : eventList) {
+                System.out.println("*** " + rwe.toString());
+            }
+        }
+        System.out.println("*** WRITE SET");
+        for(List<RWEvent> eventList : writeSet.values()) {
+            for(RWEvent rwe : eventList) {
+                System.out.println("*** " + rwe.toString());
+            }
+        }
+
+    }
+
     /**
      * Inserts a value in a list associated with a key or creates the
      * list if it doesnt exist already
@@ -111,17 +130,17 @@ public class MinhaCheckerParallel {
         values_list.add(value);
     }
 
-    public static <K,V> void insertAllInMapToLists(Map<K,List<V>> map, K key, Collection<V> values) {
+    public static <K,V> void insertAllInMapToLists(Map<K,Set<V>> map, K key, Collection<V> values) {
         if(values == null){
             return;
         }
-        List<V> values_list = map.get(key);
+        Set<V> valuesSet = map.get(key);
 
-        if(values_list == null) {
-            values_list = new ArrayList<V>();
-            map.put(key, values_list);
+        if(valuesSet == null) {
+            valuesSet = new HashSet<V>();
+            map.put(key, valuesSet);
         }
-        values_list.addAll(values);
+        valuesSet.addAll(values);
     }
 
     public static void removeRedundantEvents() {
@@ -173,17 +192,23 @@ public class MinhaCheckerParallel {
     }
 
     private static boolean checkRedundancy(Event event, String thread, int loc) {
-        MyPair<Integer,String> key = new MyPair<Integer, String>(loc, thread);
+        Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
+        MyPair<Integer,String> key = new MyPair<Integer, String>(concurrencyHistory == null? 0 : concurrencyHistory.hashCode(), thread);
         Stack<String> stack = stacks.get(key);
+
         if(stack == null || changedConcurrencyContexts.contains(thread)) {
             //the stack is empty or the concurrency context of the thread was changed: in both
             //cases, we need a new stack
             stack = new Stack<String>();
-            stacks.put(key, stack);
-            stack.push(thread);
-            //TODO: concurrency history must be a set? and getStack must use its hashCode
             //adds concurrency context of thread to concurrency history
             insertAllInMapToLists(concurrencyHistories, loc, concurrencyContexts.get(thread));
+
+            //calculates the new key for the current state of the concurrency history
+            Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
+            MyPair<Integer,String> newKey = new MyPair<Integer, String>(newConcurrencyHistory == null? 0 : newConcurrencyHistory.hashCode(), thread);
+            stacks.put(key, stack);
+
+            stack.push(thread);
             //marks the concurrency of the thread as unchenaged if it isnt already
             changedConcurrencyContexts.remove(thread);
             return false;
