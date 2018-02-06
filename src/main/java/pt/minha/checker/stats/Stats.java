@@ -9,12 +9,14 @@ public class Stats {
     public static long numConstraints = 0;
     public static long totalCandidatePairs = 0;
     public static long totalDataRacePairs = 0;
+    public static long redundantEvents = 0;
     public static double buildingModeltime = 0;
     public static double checkingTime = 0;
 
     public static void printStats(){
         System.out.println("======= RESULTS =======");
         System.out.println("> Number of events in trace:\t\t"+numEventsTrace);
+        System.out.println("> Number of redundant events in trace:\t"+redundantEvents);
         System.out.println("> Number of constraints in model:\t"+numConstraints);
         System.out.println("> Number of candidate pairs:\t\t"+totalCandidatePairs);
         System.out.println("> Number of data race pairs:\t\t"+totalDataRacePairs);

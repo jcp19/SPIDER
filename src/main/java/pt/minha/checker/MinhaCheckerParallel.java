@@ -147,7 +147,7 @@ public class MinhaCheckerParallel {
         // What I am assuming: the function getStack in ReX depends on teta-loc (and Gama-t?yes)
         //                     Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
 
-        int count = 0;
+        long count = 0;
         EventIterator events = new EventIterator(threadExecution.values());
         while(events.hasNext()) {
             Event e = events.next();
@@ -187,8 +187,7 @@ public class MinhaCheckerParallel {
                     break;
             }
         }
-        System.out.println("Removed " + count + " redundant events.");
-
+        Stats.redundantEvents = count;
     }
 
     private static boolean checkRedundancy(Event event, String thread, int loc) {
