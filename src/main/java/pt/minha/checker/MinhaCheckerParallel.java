@@ -6,12 +6,16 @@ import pt.minha.checker.events.*;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
+
+import static javax.swing.UIManager.get;
+import static pt.minha.checker.events.EventType.READ;
 
 /**
  * Created by nunomachado on 30/03/17.
@@ -30,6 +34,17 @@ public class MinhaCheckerParallel {
     public static Map<String, List<ThreadSyncEvent>> joinSet;              //Map: thread -> list of thread's join events
     public static HashSet<MyPair<RWEvent,RWEvent>> conflictCandidates;
 
+    //Redundancy Elimination structures
+    //Map: thread id -> list of he ids of the messages in the concurrency context
+    public static Map<String, List<Long>> concurrencyContexts;
+    //Map: location -> concurreny history of that location (set of message ids)
+    public static Map<Integer, Set<Long>> concurrencyHistories;
+    //Map: hashCode(TETAlocation), thread -> stack of Threads
+    public static Map<MyPair<Integer, String>, Stack<String>> stacks;
+
+    //Set of threads whose concurrency context was changed
+    public static Set<String> changedConcurrencyContexts;
+
     //solver stuff
     public static Solver solver;
 
@@ -42,6 +57,12 @@ public class MinhaCheckerParallel {
         joinSet = new HashMap<String, List<ThreadSyncEvent>>();
         conflictCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
 
+        //Redundancy-check related initializations
+        changedConcurrencyContexts = new HashSet<String>();
+        concurrencyContexts = new HashMap<String, List<Long>>();
+        concurrencyHistories = new HashMap<Integer, Set<Long>>();
+        stacks = new HashMap<MyPair<Integer, String>, Stack<String>>();
+
         try {
             String propFile = "checker.racedetection.properties";
             props = new Properties();
@@ -51,6 +72,12 @@ public class MinhaCheckerParallel {
 
                 //populate data structures
                 loadEvents();
+
+                //remove redundant events
+                removeRedundantEvents();
+
+                printDataStructures();
+                //printRWSet();
 
                 //generate constraint model
                 initSolver();
@@ -70,6 +97,127 @@ public class MinhaCheckerParallel {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    static void printRWSet() {
+        System.out.println("*** READ SET");
+        for(List<RWEvent> eventList : readSet.values()) {
+            for(RWEvent rwe : eventList) {
+                System.out.println("*** " + rwe.toString());
+            }
+        }
+        System.out.println("*** WRITE SET");
+        for(List<RWEvent> eventList : writeSet.values()) {
+            for(RWEvent rwe : eventList) {
+                System.out.println("*** " + rwe.toString());
+            }
+        }
+
+    }
+
+    /**
+     * Inserts a value in a list associated with a key or creates the
+     * list if it doesnt exist already
+     */
+    public static <K,V> void insertInMapToLists(Map<K,List<V>> map, K key, V value) {
+        List<V> values_list = map.get(key);
+
+        if(values_list == null) {
+            values_list = new ArrayList<V>();
+            map.put(key, values_list);
+        }
+        values_list.add(value);
+    }
+
+    public static <K,V> void insertAllInMapToLists(Map<K,Set<V>> map, K key, Collection<V> values) {
+        if(values == null){
+            return;
+        }
+        Set<V> valuesSet = map.get(key);
+
+        if(valuesSet == null) {
+            valuesSet = new HashSet<V>();
+            map.put(key, valuesSet);
+        }
+        valuesSet.addAll(values);
+    }
+
+    public static void removeRedundantEvents() {
+        // What I am assuming: the function getStack in ReX depends on teta-loc (and Gama-t?yes)
+        //                     Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
+
+        long count = 0;
+        EventIterator events = new EventIterator(threadExecution.values());
+        while(events.hasNext()) {
+            Event e = events.next();
+            String thread = e.getThread();
+            EventType type = e.getType();
+
+            if(type == null)
+                throw new RuntimeException("EventType not known");
+
+            switch (type) {
+                //TODO: Add REL
+                //MEM Access
+                case READ:
+                case WRITE:
+                    RWEvent rwe = (RWEvent) e;
+                    if(checkRedundancy(rwe, thread, rwe.getLoc())) {
+                        //if an event is redundant, remove from the trace
+                        events.remove();
+                        //remove from readSet and writeSet
+                        if(type == READ) {
+                            readSet.get(rwe.getVariable()).remove(rwe);
+                        } else {
+                            writeSet.get(rwe.getVariable()).remove(rwe);
+                        }
+                        count++;
+                    }
+                    break;
+
+                case SND:
+                    SocketEvent se = (SocketEvent) e;
+                    insertInMapToLists(concurrencyContexts, thread, se.getMsgId());
+                    //the concurrency context changed
+                    changedConcurrencyContexts.add(thread);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+        Stats.redundantEvents = count;
+    }
+
+    private static boolean checkRedundancy(Event event, String thread, int loc) {
+        Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
+        MyPair<Integer,String> key = new MyPair<Integer, String>(concurrencyHistory == null? 0 : concurrencyHistory.hashCode(), thread);
+        Stack<String> stack = stacks.get(key);
+
+        if(stack == null || changedConcurrencyContexts.contains(thread)) {
+            //the stack is empty or the concurrency context of the thread was changed: in both
+            //cases, we need a new stack
+            stack = new Stack<String>();
+            //adds concurrency context of thread to concurrency history
+            insertAllInMapToLists(concurrencyHistories, loc, concurrencyContexts.get(thread));
+
+            //calculates the new key for the current state of the concurrency history
+            Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
+            MyPair<Integer,String> newKey = new MyPair<Integer, String>(newConcurrencyHistory == null? 0 : newConcurrencyHistory.hashCode(), thread);
+            stacks.put(key, stack);
+
+            stack.push(thread);
+            //marks the concurrency of the thread as unchenaged if it isnt already
+            changedConcurrencyContexts.remove(thread);
+            return false;
+        } else if(stack.contains(thread) || stack.size() == 2) {
+            //if the stack already contains the thread or is full
+            return true;
+        } else {
+            //Stack has size 1 and does not contain the thread
+            stack.push(thread);
+            return false;
         }
     }
 
@@ -131,7 +279,7 @@ public class MinhaCheckerParallel {
                 long counter = event.getLong("counter");
                 RWEvent rwe = new RWEvent(thread, type, loc, var, counter);
                 threadExecution.get(thread).add(rwe);
-                if(type == EventType.READ) {
+                if(type == READ) {
                     if(!readSet.containsKey(var)){
                         readSet.put(var,new LinkedList<RWEvent>());
                     }
