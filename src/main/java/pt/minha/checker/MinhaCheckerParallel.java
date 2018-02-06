@@ -13,8 +13,10 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
+import java.util.concurrent.locks.Lock;
 
 import static javax.swing.UIManager.get;
+import static pt.minha.checker.events.EventType.LOCK;
 import static pt.minha.checker.events.EventType.READ;
 
 /**
@@ -30,6 +32,8 @@ public class MinhaCheckerParallel {
     public static Map<String, List<Event>> threadExecution;                //Map: thread -> list of all events in that thread's execution
     public static Map<String, List<RWEvent>> readSet;                      //Map: variable -> list of reads to that variable by all threads
     public static Map<String, List<RWEvent>> writeSet;                     //Map: variable -> list of writes to that variable by all threads
+    public static Map<String, List<LockEvent>> lockSet;                    //Map: variable -> list of writes to that variable by all threads
+    public static Map<String, List<LockEvent>> unlockSet;                  //Map: variable -> list of writes to that variable by all threads
     public static Map<String, List<ThreadSyncEvent>> forkSet;              //Map: thread -> list of thread's fork events
     public static Map<String, List<ThreadSyncEvent>> joinSet;              //Map: thread -> list of thread's join events
     public static HashSet<MyPair<RWEvent,RWEvent>> conflictCandidates;
@@ -313,6 +317,25 @@ public class MinhaCheckerParallel {
                     forkSet.get(thread).add((ThreadSyncEvent) tse);
                 else
                     joinSet.get(thread).add((ThreadSyncEvent) tse);
+                break;
+            case LOCK:
+            case UNLOCK:
+                int location = event.getInt("loc");
+                String variable = event.getString("variable");
+                long count = event.getLong("counter");
+                LockEvent lockEvent = new LockEvent(thread, type, location, variable, count);
+                threadExecution.get(thread).add(lockEvent);
+                if (type == LOCK) {
+                    if (!lockSet.containsKey(variable)) {
+                        lockSet.put(variable, new LinkedList<LockEvent>());
+                    }
+                    lockSet.get(variable).add(lockEvent);
+                } else {
+                    if (!unlockSet.containsKey(variable)) {
+                        unlockSet.put(variable, new LinkedList<LockEvent>());
+                    }
+                    unlockSet.get(variable).add(lockEvent);
+                }
                 break;
             default:
                 throw new JSONException("Unknown event type: " + type);

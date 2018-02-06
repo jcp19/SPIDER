@@ -20,7 +20,11 @@ public enum EventType {
 
     //socket handling partial-order events
     HNDLBEG("HANDLERBEGIN"),
-    HNDLEND("HANDLEREND");
+    HNDLEND("HANDLEREND"),
+
+    // lock and unlock events
+    LOCK("LOCK"),
+    UNLOCK("UNLOCK");
 
     private final String desc;
 
