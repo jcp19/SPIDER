@@ -338,10 +338,14 @@ public class MinhaCheckerParallel {
                 LockEvent lockEvent = new LockEvent(thread, type, location, variable, count);
                 threadExecution.get(thread).add(lockEvent);
                 if (type == LOCK) {
-                    // first component of pair is the lock event
-                    insertInMapToLists(lockEvents, variable, new MyPair<LockEvent, LockEvent>(lockEvent, null));
+                    List<MyPair<LockEvent, LockEvent>> pairList = lockEvents.get(variable);
+                    MyPair<LockEvent,LockEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
+                    if(pair == null || pair.getSecond() != null) {
+                        // Only adds the lock event if the previous lock event has a corresponding unlock
+                        // in order to handle Reentrant Locks
+                        insertInMapToLists(lockEvents, variable, new MyPair<LockEvent, LockEvent>(lockEvent, null));
+                    }
                 } else {
-                    //TODO:Handle reentrant locks
                     // second component is the unlock event associated with the lock
                     List<MyPair<LockEvent, LockEvent>> pairList = lockEvents.get(variable);
                     MyPair<LockEvent,LockEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
