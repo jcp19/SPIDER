@@ -66,6 +66,10 @@ public enum EventType {
             return EventType.HNDLBEG;
         else if(type.equals("HANDLEREND"))
             return EventType.HNDLEND;
+        else if(type.equals("LOCK"))
+            return EventType.LOCK;
+        else if(type.equals("UNLOCK"))
+            return EventType.UNLOCK;
         else
             return null;
     }
