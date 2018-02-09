@@ -13,8 +13,10 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
+import java.util.concurrent.locks.Lock;
 
 import static javax.swing.UIManager.get;
+import static pt.minha.checker.events.EventType.LOCK;
 import static pt.minha.checker.events.EventType.READ;
 
 /**
@@ -27,6 +29,7 @@ public class MinhaCheckerParallel {
 
     //data structures
     public static Map<Long, MyPair<SocketEvent, SocketEvent>> msgEvents;   //Map: message id -> pair of events (snd,rcv)
+    public static Map<String, List<MyPair<LockEvent, LockEvent>>> lockEvents;    //Map: variable -> list of pairs of locks/unlocks
     public static Map<String, List<Event>> threadExecution;                //Map: thread -> list of all events in that thread's execution
     public static Map<String, List<RWEvent>> readSet;                      //Map: variable -> list of reads to that variable by all threads
     public static Map<String, List<RWEvent>> writeSet;                     //Map: variable -> list of writes to that variable by all threads
@@ -50,6 +53,7 @@ public class MinhaCheckerParallel {
 
     public static void main(String args[]) {
         msgEvents = new HashMap<Long, MyPair<SocketEvent, SocketEvent>>();
+        lockEvents = new HashMap<String, List<MyPair<LockEvent,LockEvent>>>();
         threadExecution = new HashMap<String, List<Event>>();
         readSet = new HashMap<String, List<RWEvent>>();
         writeSet = new HashMap<String, List<RWEvent>>();
@@ -76,8 +80,9 @@ public class MinhaCheckerParallel {
                 //remove redundant events
                 removeRedundantEvents();
 
-                printDataStructures();
+                //printDataStructures();
                 //printRWSet();
+                //printLocks();
 
                 //generate constraint model
                 initSolver();
@@ -116,8 +121,19 @@ public class MinhaCheckerParallel {
 
     }
 
+    static void printLocks() {
+        System.out.println("*** LOCK SET");
+        for(List<MyPair<LockEvent, LockEvent>> eventList : lockEvents.values()) {
+            for(MyPair<LockEvent, LockEvent> e : eventList) {
+                String fst = e.getFirst() != null? e.getFirst().toString() : null;
+                String snd = e.getSecond() != null? e.getSecond().toString() : null;
+                System.out.println("*** " + fst  +" -> " + snd);
+            }
+        }
+    }
+
     /**
-     * Inserts a value in a list associated with a key or creates the
+     * Inserts a value in a list associated with a key and creates the
      * list if it doesnt exist already
      */
     public static <K,V> void insertInMapToLists(Map<K,List<V>> map, K key, V value) {
@@ -313,6 +329,32 @@ public class MinhaCheckerParallel {
                     forkSet.get(thread).add((ThreadSyncEvent) tse);
                 else
                     joinSet.get(thread).add((ThreadSyncEvent) tse);
+                break;
+            case LOCK:
+            case UNLOCK:
+                int location = event.getInt("loc");
+                String variable = event.getString("variable");
+                long count = event.getLong("counter");
+                LockEvent lockEvent = new LockEvent(thread, type, location, variable, count);
+                threadExecution.get(thread).add(lockEvent);
+                if (type == LOCK) {
+                    List<MyPair<LockEvent, LockEvent>> pairList = lockEvents.get(variable);
+                    MyPair<LockEvent,LockEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
+                    if(pair == null || pair.getSecond() != null) {
+                        // Only adds the lock event if the previous lock event has a corresponding unlock
+                        // in order to handle Reentrant Locks
+                        insertInMapToLists(lockEvents, variable, new MyPair<LockEvent, LockEvent>(lockEvent, null));
+                    }
+                } else {
+                    // second component is the unlock event associated with the lock
+                    List<MyPair<LockEvent, LockEvent>> pairList = lockEvents.get(variable);
+                    MyPair<LockEvent,LockEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
+                    if(pair == null) {
+                        insertInMapToLists(lockEvents, variable, new MyPair<LockEvent, LockEvent>(null,lockEvent));
+                    } else {
+                        pair.setSecond(lockEvent);
+                    }
+                }
                 break;
             default:
                 throw new JSONException("Unknown event type: " + type);
