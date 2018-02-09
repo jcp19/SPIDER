@@ -78,7 +78,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                removeRedundantEvents();
+                //removeRedundantEvents();
 
                 //printDataStructures();
                 //printRWSet();
@@ -91,6 +91,7 @@ public class MinhaCheckerParallel {
                 genCommunicationConstraints();
                 genForkStartConstraints();
                 genJoinExitConstraints();
+                genLockingConstraints();
                 Stats.buildingModeltime = System.currentTimeMillis() - modelStart;
 
                 //check conflicts
@@ -415,20 +416,22 @@ public class MinhaCheckerParallel {
             for(RWEvent w1 : writeSet.get(var)){
 
                 //pair with all other writes
-                for(RWEvent w2 : writeSet.get(var)){
-                    if(w1.conflictsWith(w2)){
-                        MyPair<RWEvent,RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1,w2);
-                        if(!conflictCandidates.contains(tmpPair)){
+                for (RWEvent w2 : writeSet.get(var)) {
+                    if (w1.conflictsWith(w2)) {
+                        MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, w2);
+                        if (!conflictCandidates.contains(tmpPair)) {
                             conflictCandidates.add(tmpPair);
                         }
                     }
                 }
 
                 //pair with all other reads
-                for(RWEvent r2 : readSet.get(var)){
-                    MyPair<RWEvent,RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1,r2);
-                    if(w1.conflictsWith(r2) && !conflictCandidates.contains(tmpPair)){
-                        conflictCandidates.add(tmpPair);
+                if(readSet.containsKey(var)) {
+                    for (RWEvent r2 : readSet.get(var)) {
+                        MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, r2);
+                        if (w1.conflictsWith(r2) && !conflictCandidates.contains(tmpPair)) {
+                            conflictCandidates.add(tmpPair);
+                        }
                     }
                 }
             }
@@ -568,6 +571,39 @@ public class MinhaCheckerParallel {
             for(ThreadSyncEvent e : l){
                 String cnst = solver.cLt("END_"+e.getChild(), e.toString());
                 solver.writeConst(solver.postAssert(cnst));
+            }
+        }
+    }
+
+
+    public static void genLockingConstraints() throws IOException {
+        System.out.println("[MinhaChecker] Generate locking constraints");
+        solver.writeComment("LOCKING CONSTRAINTS");
+        for(String var : lockEvents.keySet()){
+            // for two lock/unlock pairs on the same locking object,
+            // one pair must be executed either before or after the other
+            ListIterator<MyPair<LockEvent, LockEvent>> pairIterator_i = lockEvents.get(var).listIterator(0);
+            ListIterator<MyPair<LockEvent, LockEvent>> pairIterator_j;
+
+            while(pairIterator_i.hasNext()){
+                MyPair<LockEvent, LockEvent> pair_i = pairIterator_i.next();
+                //advance iterator to have two different pairs
+                pairIterator_j =  lockEvents.get(var).listIterator(pairIterator_i.nextIndex());
+
+                while(pairIterator_j.hasNext()) {
+                    MyPair<LockEvent, LockEvent> pair_j = pairIterator_j.next();
+
+                    //there is no need to add constraints for locking pairs of the same thread
+                    //as they are already encoded in the program order constraints
+                    if (pair_i.getFirst().getThread().equals(pair_j.getFirst().getThread()))
+                        continue;
+
+                    // Ui < Lj || Uj < Li
+                    String cnstUi_Lj = solver.cLt(pair_i.getSecond().toString(), pair_j.getFirst().toString());
+                    String cnstUj_Li = solver.cLt(pair_j.getSecond().toString(), pair_i.getFirst().toString());
+                    String cnst = solver.cOr(cnstUi_Lj, cnstUj_Li);
+                    solver.writeConst(solver.postAssert(cnst));
+                }
             }
         }
     }
