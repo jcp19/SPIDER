@@ -78,7 +78,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                removeRedundantEvents();
+                //removeRedundantEvents();
 
                 //printDataStructures();
                 //printRWSet();
@@ -425,10 +425,13 @@ public class MinhaCheckerParallel {
                 }
 
                 //pair with all other reads
-                for(RWEvent r2 : readSet.get(var)){
-                    MyPair<RWEvent,RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1,r2);
-                    if(w1.conflictsWith(r2) && !conflictCandidates.contains(tmpPair)){
-                        conflictCandidates.add(tmpPair);
+                List<RWEvent> varReads = readSet.get(var);
+                if(varReads != null) {
+                    for (RWEvent r2 : varReads) {
+                        MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, r2);
+                        if (w1.conflictsWith(r2) && !conflictCandidates.contains(tmpPair)) {
+                            conflictCandidates.add(tmpPair);
+                        }
                     }
                 }
             }
