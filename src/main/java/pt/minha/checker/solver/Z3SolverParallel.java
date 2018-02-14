@@ -102,11 +102,11 @@ public class Z3SolverParallel implements Solver {
             int start = 0;
             int end;
             for (int i = 0; i < CORES; i++) {
-                if(i == CORES-1){
-                    end = candidates.size();
+                if(i < CORES-1){
+                    end = start+batchsize;
                 }
                 else{
-                    end = start+batchsize;
+                    end = candidates.size();
                 }
                 WorkerZ3 w = new WorkerZ3(i,start, end, candidatesList);
                 workers[i] = w;
