@@ -95,18 +95,23 @@ public class Z3SolverParallel implements Solver {
     public HashSet<MyPair<RWEvent,RWEvent>> checkConflictsParallel(HashSet<MyPair<RWEvent,RWEvent>> candidates)
     {
         try {
-            int batchsize = candidates.size() / CORES;
 
+            int batchsize = candidates.size() / CORES;
             List<MyPair<RWEvent, RWEvent>> candidatesList = new ArrayList<MyPair<RWEvent, RWEvent>>(candidates);
             WorkerZ3[] workers = new WorkerZ3[CORES];
             int start = 0;
-            int end = batchsize;
+            int end;
             for (int i = 0; i < CORES; i++) {
+                if(i == CORES-1){
+                    end = candidates.size();
+                }
+                else{
+                    end = start+batchsize;
+                }
                 WorkerZ3 w = new WorkerZ3(i,start, end, candidatesList);
                 workers[i] = w;
                 w.start();
                 start = end;
-                end = (start+batchsize) <= candidates.size() ? (start+batchsize) : candidates.size();
             }
             for (int i = 0; i < CORES; i++) {
                 workers[i].join();
