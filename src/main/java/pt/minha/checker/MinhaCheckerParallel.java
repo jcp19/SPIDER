@@ -78,7 +78,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                //removeRedundantEvents();
+                removeRedundantEvents();
 
                 //printDataStructures();
                 //printRWSet();
@@ -161,8 +161,10 @@ public class MinhaCheckerParallel {
     }
 
     public static void removeRedundantEvents() {
-        // What I am assuming: the function getStack in ReX depends on teta-loc (and Gama-t?yes)
-        //                     Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
+        // Assumptions:
+        // - The order of the events iterator corresponds to the chronological order of the events
+        // - the function getStack in ReX depends on teta-loc (and Gama-t)
+        //   Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
 
         long count = 0;
         EventIterator events = new EventIterator(threadExecution.values());
@@ -184,11 +186,7 @@ public class MinhaCheckerParallel {
                         //if an event is redundant, remove from the trace
                         events.remove();
                         //remove from readSet and writeSet
-                        if(type == READ) {
-                            readSet.get(rwe.getVariable()).remove(rwe);
-                        } else {
-                            writeSet.get(rwe.getVariable()).remove(rwe);
-                        }
+                        (type == READ? readSet : writeSet).get(rwe.getVariable()).remove(rwe);
                         count++;
                     }
                     break;
@@ -201,8 +199,22 @@ public class MinhaCheckerParallel {
                     break;
 
                 default:
+                    // advance e
                     break;
             }
+            System.out.println("*************************************************");
+            System.out.println("Concurrency contexts");
+            for(String s : concurrencyContexts.keySet()) {
+                System.out.println(s);
+            }
+            for(Map.Entry<String, List<Long>> cc : concurrencyContexts.entrySet()) {
+                System.out.println(cc.getKey() + " : " + cc.getValue().toString());
+            }
+            System.out.println("Concurrency Histories");
+            for(int s : concurrencyHistories.keySet()) {
+                System.out.println(s);
+            }
+            System.out.println("*************************************************");
         }
         Stats.redundantEvents = count;
     }
@@ -231,11 +243,12 @@ public class MinhaCheckerParallel {
         } else if(stack.contains(thread) || stack.size() == 2) {
             //if the stack already contains the thread or is full
             return true;
-        } else {
+        } else if(stack.size() == 1) {
             //Stack has size 1 and does not contain the thread
             stack.push(thread);
             return false;
         }
+        return false;
     }
 
     public static void loadEvents() throws IOException, JSONException {
