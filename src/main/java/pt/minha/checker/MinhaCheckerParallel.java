@@ -26,15 +26,15 @@ public class MinhaCheckerParallel {
     public static Properties props;
 
     //data structures
-    public static Map<Long, MyPair<SocketEvent, SocketEvent>> msgEvents;   //Map: message id -> pair of events (snd,rcv)
-    public static Map<String, List<MyPair<LockEvent, LockEvent>>> lockEvents;    //Map: variable -> list of pairs of locks/unlocks
-    public static Map<String, List<Event>> threadExecution;                //Map: thread -> list of all events in that thread's execution
-    public static Map<String, List<RWEvent>> readSet;                      //Map: variable -> list of reads to that variable by all threads
-    public static Map<String, List<RWEvent>> writeSet;                     //Map: variable -> list of writes to that variable by all threads
-    public static Map<String, List<ThreadSyncEvent>> forkSet;              //Map: thread -> list of thread's fork events
-    public static Map<String, List<ThreadSyncEvent>> joinSet;              //Map: thread -> list of thread's join events
-    public static HashSet<MyPair<RWEvent,RWEvent>> dataRaceCandidates;
-    public static HashSet<MyPair<SocketEvent,SocketEvent>> msgRaceCandidates;
+    public static Map<Long, MyPair<SocketEvent, SocketEvent>> msgEvents;       //Map: message id -> pair of events (snd,rcv)
+    public static Map<String, List<MyPair<LockEvent, LockEvent>>> lockEvents;  //Map: variable -> list of pairs of locks/unlocks
+    public static Map<String, List<Event>> threadExecution;                    //Map: thread -> list of all events in that thread's execution
+    public static Map<String, List<RWEvent>> readSet;                          //Map: variable -> list of reads to that variable by all threads
+    public static Map<String, List<RWEvent>> writeSet;                         //Map: variable -> list of writes to that variable by all threads
+    public static Map<String, List<ThreadSyncEvent>> forkSet;                  //Map: thread -> list of thread's fork events
+    public static Map<String, List<ThreadSyncEvent>> joinSet;                  //Map: thread -> list of thread's join events
+    public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
+    public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
     // Debug data
     public static HashSet<Integer> redundantEvents;
 
@@ -70,8 +70,8 @@ public class MinhaCheckerParallel {
         writeSet = new HashMap<String, List<RWEvent>>();
         forkSet = new HashMap<String, List<ThreadSyncEvent>>();
         joinSet = new HashMap<String, List<ThreadSyncEvent>>();
-        dataRaceCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
-        msgRaceCandidates = new HashSet<MyPair<SocketEvent, SocketEvent>>();
+        dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
+        msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
 
         //DEBUG
         redundantEvents = new HashSet<Integer>();
@@ -115,7 +115,9 @@ public class MinhaCheckerParallel {
 
                 //check conflicts
                 genDataRaceCandidates();
+                genMsgRaceCandidates();
                 checkDataRaces();
+                checkMsgRaces();
                 solver.close();//*/
 
                 Stats.printStats();
@@ -489,20 +491,83 @@ public class MinhaCheckerParallel {
         //DEBUG: print candidate pairs
         /*for(MyPair<RWEvent,RWEvent> pair : dataRaceCandidates){
             System.out.println(pair);
-        }*/
+        }//*/
     }
 
-    public static void checkDataRaces() throws IOException{
+    public static void genMsgRaceCandidates(){
+        // generate all pairs of message race candidates
+        // a pair of RCV operations is a candidate if:
+        // a) both occur at the same node
+        // b) are either from different threads of from different message handlers in the same thread
+        List<MyPair<SocketEvent, SocketEvent>> list = new ArrayList<MyPair<SocketEvent, SocketEvent>>(msgEvents.values());
+        ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_i = list.listIterator(0);
+        ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_j;
+
+        while(pairIterator_i.hasNext()){
+            SocketEvent rcv1 = pairIterator_i.next().getSecond();
+            //advance iterator to have two different pairs
+            pairIterator_j = list.listIterator(pairIterator_i.nextIndex());
+
+            while(pairIterator_j.hasNext()){
+                SocketEvent rcv2 = pairIterator_j.next().getSecond();
+                if(rcv1.conflictsWith(rcv2)){
+                    //make a pair with SND events because
+                    //two RCV events are racing if their respective SND events have the same order
+                    SocketEvent snd1 = msgEvents.get(rcv1.getMsgId()).getFirst();
+                    SocketEvent snd2 = msgEvents.get(rcv2.getMsgId()).getFirst();
+                    MyPair<SocketEvent,SocketEvent> raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd1,snd2);
+                    msgRaceCandidates.add(raceCandidate);
+                }
+            }
+        }
+
+        //DEBUG: print candidate pairs
+        /*for(MyPair<? extends Event,? extends Event> pair : msgRaceCandidates){
+            System.out.println(pair);
+        }//*/
+    }
+
+    public static void checkDataRaces() throws IOException {
+        if(dataRaceCandidates.isEmpty()) {
+            System.out.println("[MinhaChecker] No data races to check (" + Stats.totalDataRaceCandidates + " candidates)");
+            return;
+        }
+
         solver.writeComment("DATA RACE CONSTRAINTS");
-        Stats.totalCandidatePairs = dataRaceCandidates.size();
-        System.out.println("[MinhaChecker] Start data race checking ("+Stats.totalCandidatePairs+" candidates)");
+        Stats.totalDataRaceCandidates = dataRaceCandidates.size();
+        System.out.println("[MinhaChecker] Start data race checking ("+Stats.totalDataRaceCandidates +" candidates)");
         long checkingStart = System.currentTimeMillis();
-        dataRaceCandidates = ((Z3SolverParallel) solver).checkDataRacesParallel(dataRaceCandidates);
-        Stats.checkingTime = System.currentTimeMillis() - checkingStart;
+        dataRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(dataRaceCandidates);
+        Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
         Stats.totalDataRacePairs = dataRaceCandidates.size();
-        System.out.println("#Data Race Candidates: "+Stats.totalCandidatePairs+" | #Actual Data Races: "+Stats.totalDataRacePairs);
-        for(MyPair<RWEvent,RWEvent> conf : dataRaceCandidates){
+        System.out.println("#Data Race Candidates: "+Stats.totalDataRaceCandidates +" | #Actual Data Races: "+Stats.totalDataRacePairs);
+        for(MyPair<? extends Event,? extends Event> conf : dataRaceCandidates){
             System.out.println("-- "+conf);
+        }
+    }
+
+    public static void checkMsgRaces() throws IOException {
+        if(msgRaceCandidates.isEmpty()) {
+            System.out.println("[MinhaChecker] No message races to check (" + Stats.totalDataRaceCandidates + " candidates)");
+            return;
+        }
+
+        solver.writeComment("MESSAGE RACE CONSTRAINTS");
+        Stats.totalMsgRaceCandidates = msgRaceCandidates.size();
+        System.out.println("[MinhaChecker] Start message race checking ("+Stats.totalMsgRaceCandidates +" candidates)");
+        long checkingStart = System.currentTimeMillis();
+        msgRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(msgRaceCandidates);
+        Stats.checkingTimeMsgRace = System.currentTimeMillis() - checkingStart;
+        Stats.totalMsgRacePairs = msgRaceCandidates.size();
+        System.out.println("#Message Race Candidates: "+Stats.totalMsgRaceCandidates +" | #Actual Message Races: "+Stats.totalMsgRacePairs);
+        for(MyPair<? extends Event, ? extends Event> conf : msgRaceCandidates){
+            //translate SND events to their respective RCV events
+            SocketEvent snd1 = (SocketEvent) conf.getFirst();
+            SocketEvent snd2 = (SocketEvent) conf.getSecond();
+            SocketEvent rcv1 = msgEvents.get(snd1.getMsgId()).getSecond();
+            SocketEvent rcv2 = msgEvents.get(snd2.getMsgId()).getSecond();
+            MyPair<SocketEvent, SocketEvent> rcv_conf = new MyPair<SocketEvent, SocketEvent>(rcv1, rcv2);
+            System.out.println("-- "+rcv_conf);
         }
     }
 

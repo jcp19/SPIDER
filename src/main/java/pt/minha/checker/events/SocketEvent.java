@@ -59,6 +59,19 @@ public class SocketEvent extends Event {
         this.timestamp = timestamp;
     }
 
+    public boolean conflictsWith(SocketEvent e){
+        //two socket events conflict if:
+        // a) they are distinct RCV events
+        // b) occur at the same node
+
+        if((type == EventType.SND || e.getType() == EventType.SND))
+            return false;
+
+        return (this.dst.equals(e.getDst())
+                && this.socketId.equals(e.getSocketId())
+                && !this.equals(e));
+    }
+
     @Override
     public boolean equals(Object o){
         if(o == this)
@@ -67,11 +80,11 @@ public class SocketEvent extends Event {
         if (o == null || getClass() != o.getClass()) return false;
 
         SocketEvent tmp = (SocketEvent)o;
-        return (tmp.getDst() == this.dst
+        return (tmp.getDst().equals(this.dst)
                 && tmp.getMsgId() == this.msgId
-                && tmp.getSrc() == this.src
-                && tmp.getSocketId() == this.socketId
-                && tmp.getThread() == this.thread
+                && tmp.getSrc().equals(this.src)
+                && tmp.getSocketId().equals(this.socketId)
+                && tmp.getThread().equals(this.thread)
                 && tmp.getTimestamp() == this.timestamp
         );
     }

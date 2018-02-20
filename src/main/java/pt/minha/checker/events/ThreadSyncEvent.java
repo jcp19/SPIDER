@@ -32,10 +32,10 @@ public class ThreadSyncEvent extends Event{
 
         if (o == null || getClass() != o.getClass()) return false;
 
-        Event tmp = (Event)o;
-        return (tmp.getThread() == this.thread
+        ThreadSyncEvent tmp = (ThreadSyncEvent)o;
+        return (tmp.getThread().equals(this.thread)
                 && tmp.getType() == this.type
-                && tmp.getThread() == this.child
+                && tmp.getChild().equals(this.child)
         );
     }
 }

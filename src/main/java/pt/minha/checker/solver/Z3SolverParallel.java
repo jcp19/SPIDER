@@ -1,7 +1,9 @@
 package pt.minha.checker.solver;
 
+import pt.minha.checker.events.Event;
 import pt.minha.checker.events.MyPair;
 import pt.minha.checker.events.RWEvent;
+import pt.minha.checker.events.SocketEvent;
 import pt.minha.checker.stats.Stats;
 
 import java.io.*;
@@ -22,7 +24,7 @@ public class Z3SolverParallel implements Solver {
     private static Process[] z3Processes;
     private static BufferedReader[] readers;
     private static BufferedWriter[] writers;
-    private ConcurrentHashMap<Integer,MyPair<RWEvent,RWEvent>> dataRacesFound;
+    private ConcurrentHashMap<Integer,MyPair<? extends Event,? extends Event>> racesFound;
 
     private Z3SolverParallel(){}
 
@@ -53,7 +55,6 @@ public class Z3SolverParallel implements Solver {
         }
 
         this.writeConst("(set-option :produce-unsat-cores true)");
-        dataRacesFound = new ConcurrentHashMap<Integer,MyPair<RWEvent, RWEvent>>();
     }
 
     public void close() throws IOException {
@@ -84,20 +85,13 @@ public class Z3SolverParallel implements Solver {
         outfile.write("\n; "+comment+"\n");
     }
 
-    /*
-     * Use checkDataRacesParallel instead of checkDataRace with Z3SolverParallel
-     */
-    public boolean checkDataRace(String e1, String e2) {
-        return false;
-    }
 
-
-    public HashSet<MyPair<RWEvent,RWEvent>> checkDataRacesParallel(HashSet<MyPair<RWEvent,RWEvent>> candidates)
+    public HashSet<MyPair<? extends Event, ? extends  Event>> checkRacesParallel(HashSet<MyPair<? extends Event, ? extends Event>> candidates)
     {
         try {
-
+            racesFound = new ConcurrentHashMap<Integer,MyPair<? extends Event, ? extends Event>>();
             int batchsize = candidates.size() / CORES;
-            List<MyPair<RWEvent, RWEvent>> candidatesList = new ArrayList<MyPair<RWEvent, RWEvent>>(candidates);
+            List<MyPair<? extends Event, ? extends Event>> candidatesList = new ArrayList<MyPair<? extends Event, ? extends Event>>(candidates);
             WorkerZ3[] workers = new WorkerZ3[CORES];
             int start = 0;
             int end;
@@ -121,7 +115,7 @@ public class Z3SolverParallel implements Solver {
             e.printStackTrace();
         }
         finally {
-            return  new HashSet<MyPair<RWEvent,RWEvent>>(dataRacesFound.values());
+            return  new HashSet<MyPair<? extends Event,? extends Event>>(racesFound.values());
         }
     }
 
@@ -253,9 +247,9 @@ public class Z3SolverParallel implements Solver {
         private int id;
         private int startPos;
         private int endPos;
-        List<MyPair<RWEvent,RWEvent>> candidates;
+        List<MyPair<? extends Event,? extends Event>> candidates;
 
-        public WorkerZ3(int tid, int start, int end, List<MyPair<RWEvent,RWEvent>> candidatePairs) throws IOException{
+        public WorkerZ3(int tid, int start, int end, List<MyPair<? extends Event,? extends Event>> candidatePairs) throws IOException{
             id = tid;
             startPos = start;
             endPos = end;
@@ -269,10 +263,10 @@ public class Z3SolverParallel implements Solver {
 
                 //check data races for a portion of the list
                 for(int i = startPos; i < endPos; i++){
-                    MyPair<RWEvent,RWEvent> candidate = candidates.get(i);
-                    boolean isConflict = checkDataRace(candidate.getFirst().toString(), candidate.getSecond().toString());
+                    MyPair<? extends Event,? extends Event> candidate = candidates.get(i);
+                    boolean isConflict = checkRace(candidate.getFirst().toString(), candidate.getSecond().toString());
                     if (isConflict) {
-                        dataRacesFound.put(candidate.hashCode(), candidate);
+                        racesFound.put(candidate.hashCode(), candidate);
                     }
                 }
             }
@@ -281,9 +275,9 @@ public class Z3SolverParallel implements Solver {
             }
         }
 
-        public boolean checkDataRace(String e1, String e2){
+        public boolean checkRace(String e1, String e2){
             try {
-                 writers[id].write(push()+"\n");
+                writers[id].write(push()+"\n");
                 writers[id].write(postAssert(cEq(e1, e2))+"\n");
                 writers[id].write(checkSat()+"\n");
                 writers[id].write(pop()+"\n");
@@ -294,7 +288,7 @@ public class Z3SolverParallel implements Solver {
                     isConflict = readers[id].readLine();
                     //System.out.println(isConflict);
                     if(isConflict.contains("error"))
-                       System.out.println(e1 + " " + e2 + " --> " + isConflict);
+                        System.out.println(e1 + " " + e2 + " --> " + isConflict);
                 }while (isConflict.contains("error"));
 
                 return (isConflict.equals("sat"));
