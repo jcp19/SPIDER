@@ -6,14 +6,12 @@ import pt.minha.checker.events.*;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
-import java.util.concurrent.locks.Lock;
 
 import static javax.swing.UIManager.get;
 import static pt.minha.checker.events.EventType.LOCK;
@@ -35,7 +33,8 @@ public class MinhaCheckerParallel {
     public static Map<String, List<RWEvent>> writeSet;                     //Map: variable -> list of writes to that variable by all threads
     public static Map<String, List<ThreadSyncEvent>> forkSet;              //Map: thread -> list of thread's fork events
     public static Map<String, List<ThreadSyncEvent>> joinSet;              //Map: thread -> list of thread's join events
-    public static HashSet<MyPair<RWEvent,RWEvent>> conflictCandidates;
+    public static HashSet<MyPair<RWEvent,RWEvent>> dataRaceCandidates;
+    public static HashSet<MyPair<SocketEvent,SocketEvent>> msgRaceCandidates;
     // Debug data
     public static HashSet<Integer> redundantEvents;
 
@@ -71,7 +70,8 @@ public class MinhaCheckerParallel {
         writeSet = new HashMap<String, List<RWEvent>>();
         forkSet = new HashMap<String, List<ThreadSyncEvent>>();
         joinSet = new HashMap<String, List<ThreadSyncEvent>>();
-        conflictCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
+        dataRaceCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
+        msgRaceCandidates = new HashSet<MyPair<SocketEvent, SocketEvent>>();
 
         //DEBUG
         redundantEvents = new HashSet<Integer>();
@@ -106,8 +106,8 @@ public class MinhaCheckerParallel {
                 Stats.buildingModeltime = System.currentTimeMillis() - modelStart;
 
                 //check conflicts
-                genConflictCandidates();
-                checkConflicts();
+                genDataRaceCandidates();
+                checkDataRaces();
                 solver.close();//*/
 
                 Stats.printStats();
@@ -448,8 +448,8 @@ public class MinhaCheckerParallel {
     }
 
 
-    public static void genConflictCandidates() {
-        // generate all pairs of conflict candidates
+    public static void genDataRaceCandidates() {
+        // generate all pairs of data race candidates
         // a pair of RW operations is a candidate if:
         // a) at least of one of the operations is a write
         // b) both operations access the same variable
@@ -461,8 +461,8 @@ public class MinhaCheckerParallel {
                 for (RWEvent w2 : writeSet.get(var)) {
                     if (w1.conflictsWith(w2)) {
                         MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, w2);
-                        if (!conflictCandidates.contains(tmpPair)) {
-                            conflictCandidates.add(tmpPair);
+                        if (!dataRaceCandidates.contains(tmpPair)) {
+                            dataRaceCandidates.add(tmpPair);
                         }
                     }
                 }
@@ -471,8 +471,8 @@ public class MinhaCheckerParallel {
                 if(readSet.containsKey(var)) {
                     for (RWEvent r2 : readSet.get(var)) {
                         MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, r2);
-                        if (w1.conflictsWith(r2) && !conflictCandidates.contains(tmpPair)) {
-                            conflictCandidates.add(tmpPair);
+                        if (w1.conflictsWith(r2) && !dataRaceCandidates.contains(tmpPair)) {
+                            dataRaceCandidates.add(tmpPair);
                         }
                     }
                 }
@@ -480,21 +480,21 @@ public class MinhaCheckerParallel {
         }
 
         //DEBUG: print candidate pairs
-        /*for(MyPair<RWEvent,RWEvent> pair : conflictCandidates){
+        /*for(MyPair<RWEvent,RWEvent> pair : dataRaceCandidates){
             System.out.println(pair);
         }*/
     }
 
-    public static void checkConflicts() throws IOException{
-        solver.writeComment("CONFLICT CONSTRAINTS");
-        Stats.totalCandidatePairs = conflictCandidates.size();
+    public static void checkDataRaces() throws IOException{
+        solver.writeComment("DATA RACE CONSTRAINTS");
+        Stats.totalCandidatePairs = dataRaceCandidates.size();
         System.out.println("[MinhaChecker] Start data race checking ("+Stats.totalCandidatePairs+" candidates)");
         long checkingStart = System.currentTimeMillis();
-        conflictCandidates = ((Z3SolverParallel) solver).checkConflictsParallel(conflictCandidates);
+        dataRaceCandidates = ((Z3SolverParallel) solver).checkDataRacesParallel(dataRaceCandidates);
         Stats.checkingTime = System.currentTimeMillis() - checkingStart;
-        Stats.totalDataRacePairs = conflictCandidates.size();
-        System.out.println("#Conflict Candidates: "+Stats.totalCandidatePairs+" | #Actual Conflicts: "+Stats.totalDataRacePairs);
-        for(MyPair<RWEvent,RWEvent> conf : conflictCandidates){
+        Stats.totalDataRacePairs = dataRaceCandidates.size();
+        System.out.println("#Data Race Candidates: "+Stats.totalCandidatePairs+" | #Actual Data Races: "+Stats.totalDataRacePairs);
+        for(MyPair<RWEvent,RWEvent> conf : dataRaceCandidates){
             System.out.println("-- "+conf);
         }
     }

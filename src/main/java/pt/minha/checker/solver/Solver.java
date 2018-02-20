@@ -13,7 +13,7 @@ public interface Solver {
     void flush() throws IOException;
     void writeConst(String constraint) throws IOException;
     void writeComment(String comment) throws IOException;
-    boolean checkConflict(String e1, String e2);
+    boolean checkDataRace(String e1, String e2);
     String cAnd(String exp1, String exp2);
     String cAnd(String exp1);
     String cOr(String exp1, String exp2);
