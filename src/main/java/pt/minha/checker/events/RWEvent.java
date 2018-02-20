@@ -4,22 +4,22 @@ package pt.minha.checker.events;
  * Created by nunomachado on 31/03/17.
  */
 public class RWEvent extends Event {
-    int loc;
+    String loc;
     String var;
     long counter;
 
-    public RWEvent(String thread, EventType type, int loc, String var, long counter) {
+    public RWEvent(String thread, EventType type, String loc, String var, long counter) {
         super(thread, type);
         this.loc = loc;
         this.var = var;
         this.counter = counter;
     }
 
-    public int getLoc() {
+    public String getLoc() {
         return loc;
     }
 
-    public void setLoc(int loc) {
+    public void setLoc(String loc) {
         this.loc = loc;
     }
 
