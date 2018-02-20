@@ -85,14 +85,14 @@ public class Z3SolverParallel implements Solver {
     }
 
     /*
-     * Use checkConflictsParallel instead of checkConflict with Z3SolverParallel
+     * Use checkDataRacesParallel instead of checkDataRace with Z3SolverParallel
      */
-    public boolean checkConflict(String e1, String e2) {
+    public boolean checkDataRace(String e1, String e2) {
         return false;
     }
 
 
-    public HashSet<MyPair<RWEvent,RWEvent>> checkConflictsParallel(HashSet<MyPair<RWEvent,RWEvent>> candidates)
+    public HashSet<MyPair<RWEvent,RWEvent>> checkDataRacesParallel(HashSet<MyPair<RWEvent,RWEvent>> candidates)
     {
         try {
 
@@ -270,7 +270,7 @@ public class Z3SolverParallel implements Solver {
                 //check data races for a portion of the list
                 for(int i = startPos; i < endPos; i++){
                     MyPair<RWEvent,RWEvent> candidate = candidates.get(i);
-                    boolean isConflict = checkConflict(candidate.getFirst().toString(), candidate.getSecond().toString());
+                    boolean isConflict = checkDataRace(candidate.getFirst().toString(), candidate.getSecond().toString());
                     if (isConflict) {
                         dataRacesFound.put(candidate.hashCode(), candidate);
                     }
@@ -281,7 +281,7 @@ public class Z3SolverParallel implements Solver {
             }
         }
 
-        public boolean checkConflict(String e1, String e2){
+        public boolean checkDataRace(String e1, String e2){
             try {
                  writers[id].write(push()+"\n");
                 writers[id].write(postAssert(cEq(e1, e2))+"\n");
