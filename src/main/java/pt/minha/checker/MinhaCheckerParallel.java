@@ -383,7 +383,7 @@ public class MinhaCheckerParallel {
                 break;
             case LOCK:
             case UNLOCK:
-                int location = event.getInt("loc");
+                String location = event.getString("loc");
                 String variable = event.getString("variable");
                 long count = event.getLong("counter");
                 LockEvent lockEvent = new LockEvent(thread, type, location, variable, count);

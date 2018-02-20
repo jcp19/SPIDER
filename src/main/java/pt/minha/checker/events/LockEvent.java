@@ -1,23 +1,23 @@
 package pt.minha.checker.events;
 
 public class LockEvent extends Event {
-    int loc;
+    String loc;
     String var;
     // unique identifier of lock/unlock events
     long counter;
 
-    public LockEvent(String thread, EventType type, int loc, String var, long counter) {
+    public LockEvent(String thread, EventType type, String loc, String var, long counter) {
         super(thread, type);
         this.loc = loc;
         this.var = var;
         this.counter = counter;
     }
 
-    public int getLoc() {
+    public String getLoc() {
         return loc;
     }
 
-    public void setLoc(int loc) {
+    public void setLoc(String loc) {
         this.loc = loc;
     }
 
