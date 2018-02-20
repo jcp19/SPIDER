@@ -44,7 +44,7 @@ public class MinhaCheckerParallel {
     //Map: location -> concurreny history of that location (set of message ids)
     public static Map<String, Set<Long>> concurrencyHistories;
     //Map: hashCode(TETAlocation), thread -> stack of Threads
-    public static Map<MyPair<Integer, String>, Stack<String>> stacks;
+    public static Map<MyPair<String, String>, Stack<String>> stacks; //Map: (loc,thread) -> stack
 
     //Set of threads whose concurrency context was changed
     public static Set<String> changedConcurrencyContexts;
@@ -80,7 +80,7 @@ public class MinhaCheckerParallel {
         changedConcurrencyContexts = new HashSet<String>();
         concurrencyContexts = new HashMap<String, Set<Long>>();
         concurrencyHistories = new HashMap<String, Set<Long>>();
-        stacks = new HashMap<MyPair<Integer, String>, Stack<String>>();
+        stacks = new HashMap<MyPair<String, String>, Stack<String>>();
 
         try {
             String propFile = "checker.racedetection.properties";
@@ -221,7 +221,7 @@ public class MinhaCheckerParallel {
     public static void removeRedundantEvents() {
         // Assumptions:
         // - The order of the events iterator corresponds to the chronological order of the events
-        // - the function getStack in ReX depends on the current state of teta-loc and Gama-t
+        // !CHANGED!: - the function getStack in ReX depends on the current state of teta-loc and Gama-t
         // - Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
 
         long count = 0;
@@ -279,10 +279,10 @@ public class MinhaCheckerParallel {
     private static boolean checkRedundancy(RWEvent event, String thread) {
         String loc = event.getLoc();
         Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
-        MyPair<Integer,String> key = new MyPair<Integer, String>(concurrencyHistory == null? 0 : concurrencyHistory.hashCode(), thread);
+        MyPair<String,String> key = new MyPair<String, String>(event.getLoc(), thread);
         Stack<String> stack = stacks.get(key);
 
-        if(stack == null || changedConcurrencyContexts.contains(thread)) {
+        if(stack == null /*|| changedConcurrencyContexts.contains(thread) */) {
             //the stack is empty or the concurrency context of the thread was changed: in both
             //cases, we need a new stack
             stack = new Stack<String>();
@@ -291,12 +291,12 @@ public class MinhaCheckerParallel {
 
             //calculates the new key for the current state of the concurrency history
             Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
-            MyPair<Integer,String> newKey = new MyPair<Integer, String>(newConcurrencyHistory == null? 0 : newConcurrencyHistory.hashCode(), thread);
+            MyPair<String,String> newKey = new MyPair<String, String>(event.getLoc(), thread);
             stacks.put(key, stack);
 
             stack.push(thread);
             //marks the concurrency of the thread as unchenaged if it isnt already
-            changedConcurrencyContexts.remove(thread);
+            //changedConcurrencyContexts.remove(thread);
             return false;
         } else if(stack.contains(thread) || stack.size() == 2) {
             //if the stack already contains the thread or is full
