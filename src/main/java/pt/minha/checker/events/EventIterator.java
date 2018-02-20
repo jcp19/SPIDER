@@ -14,7 +14,7 @@ public class EventIterator implements Iterator<Event>{
     public final Comparator<MyPair<ListIterator<Event>,Event>> heapOrder = new Comparator<MyPair<ListIterator<Event>, Event>>() {
         //doesnt support null arguments
         public int compare(MyPair<ListIterator<Event>, Event> o1, MyPair<ListIterator<Event>, Event> o2) {
-            return o2.getSecond().getId() - o1.getSecond().getId();
+            return o1.getSecond().getId() - o2.getSecond().getId();
         }
     };
 

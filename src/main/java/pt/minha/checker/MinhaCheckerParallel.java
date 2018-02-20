@@ -36,6 +36,8 @@ public class MinhaCheckerParallel {
     public static Map<String, List<ThreadSyncEvent>> forkSet;              //Map: thread -> list of thread's fork events
     public static Map<String, List<ThreadSyncEvent>> joinSet;              //Map: thread -> list of thread's join events
     public static HashSet<MyPair<RWEvent,RWEvent>> conflictCandidates;
+    // Debug data
+    public static HashSet<Integer> redundantEvents;
 
     //Redundancy Elimination structures
     //Map: thread id -> list of he ids of the messages in the concurrency context
@@ -51,6 +53,16 @@ public class MinhaCheckerParallel {
     //solver stuff
     public static Solver solver;
 
+    public static void printIteratorOrder() {
+        EventIterator events = new EventIterator(threadExecution.values());
+        System.out.println(">>>>>>>>>>>");
+        while (events.hasNext()) {
+            Event e = events.next();
+            System.out.println(e.getId() + " :: " + e.toString());
+        }
+        System.out.println(">>>>>>>>>>>");
+    }
+
     public static void main(String args[]) {
         msgEvents = new HashMap<Long, MyPair<SocketEvent, SocketEvent>>();
         lockEvents = new HashMap<String, List<MyPair<LockEvent,LockEvent>>>();
@@ -60,6 +72,9 @@ public class MinhaCheckerParallel {
         forkSet = new HashMap<String, List<ThreadSyncEvent>>();
         joinSet = new HashMap<String, List<ThreadSyncEvent>>();
         conflictCandidates = new HashSet<MyPair<RWEvent, RWEvent>>();
+
+        //DEBUG
+        redundantEvents = new HashSet<Integer>();
 
         //Redundancy-check related initializations
         changedConcurrencyContexts = new HashSet<String>();
@@ -79,10 +94,6 @@ public class MinhaCheckerParallel {
 
                 //remove redundant events
                 removeRedundantEvents();
-
-                //printDataStructures();
-                //printRWSet();
-                //printLocks();
 
                 //generate constraint model
                 initSolver();
@@ -147,7 +158,7 @@ public class MinhaCheckerParallel {
         values_list.add(value);
     }
 
-    public static <K,V> void insertAllInMapToLists(Map<K,Set<V>> map, K key, Collection<V> values) {
+    public static <K,V> void insertAllInMapToSet(Map<K,Set<V>> map, K key, Collection<V> values) {
         if(values == null){
             return;
         }
@@ -160,11 +171,31 @@ public class MinhaCheckerParallel {
         valuesSet.addAll(values);
     }
 
+    public static void printDebugInfo() {
+        System.out.println("*************************************************");
+        System.out.println("Concurrency contexts:");
+//        for(String s : concurrencyContexts.keySet()) {
+//            System.out.println(s);
+//        }
+        for(Map.Entry<String, List<Long>> cc : concurrencyContexts.entrySet()) {
+            System.out.println(cc.getKey() + " : " + cc.getValue().toString());
+        }
+        System.out.println("Concurrency Histories:");
+        for(int s : concurrencyHistories.keySet()) {
+            System.out.println(s);
+        }
+        System.out.println("Stacks:");
+        System.out.println(stacks.entrySet().toString());
+        System.out.println("Redundant events:");
+        System.out.println(redundantEvents.toString());
+        System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    }
+
     public static void removeRedundantEvents() {
         // Assumptions:
         // - The order of the events iterator corresponds to the chronological order of the events
-        // - the function getStack in ReX depends on teta-loc (and Gama-t)
-        //   Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
+        // - the function getStack in ReX depends on the current state of teta-loc and Gama-t
+        // - Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
 
         long count = 0;
         EventIterator events = new EventIterator(threadExecution.values());
@@ -177,14 +208,22 @@ public class MinhaCheckerParallel {
                 throw new RuntimeException("EventType not known");
 
             switch (type) {
-                //TODO: Add REL
+                case UNLOCK:
+                    LockEvent le = (LockEvent) e;
+                    //temporary use of hashCode
+                    insertInMapToLists(concurrencyContexts, thread, (long) le.getVariable().hashCode());
+                    //the concurrency context changed
+                    changedConcurrencyContexts.add(thread);
+                    break;
                 //MEM Access
                 case READ:
                 case WRITE:
                     RWEvent rwe = (RWEvent) e;
-                    if(checkRedundancy(rwe, thread, rwe.getLoc())) {
+                    if(checkRedundancy(rwe, thread)) {
                         //if an event is redundant, remove from the trace
                         events.remove();
+                        //DEBUG
+                        redundantEvents.add(e.getId());
                         //remove from readSet and writeSet
                         (type == READ? readSet : writeSet).get(rwe.getVariable()).remove(rwe);
                         count++;
@@ -202,24 +241,15 @@ public class MinhaCheckerParallel {
                     // advance e
                     break;
             }
-            System.out.println("*************************************************");
-            System.out.println("Concurrency contexts");
-            for(String s : concurrencyContexts.keySet()) {
-                System.out.println(s);
-            }
-            for(Map.Entry<String, List<Long>> cc : concurrencyContexts.entrySet()) {
-                System.out.println(cc.getKey() + " : " + cc.getValue().toString());
-            }
-            System.out.println("Concurrency Histories");
-            for(int s : concurrencyHistories.keySet()) {
-                System.out.println(s);
-            }
-            System.out.println("*************************************************");
+            //System.out.println("-- Event " + e.getId() + " : " + e.toString());
+            //printDebugInfo();
+
         }
         Stats.redundantEvents = count;
     }
 
-    private static boolean checkRedundancy(Event event, String thread, int loc) {
+    private static boolean checkRedundancy(RWEvent event, String thread) {
+        int loc = event.getLoc();
         Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
         MyPair<Integer,String> key = new MyPair<Integer, String>(concurrencyHistory == null? 0 : concurrencyHistory.hashCode(), thread);
         Stack<String> stack = stacks.get(key);
@@ -229,7 +259,7 @@ public class MinhaCheckerParallel {
             //cases, we need a new stack
             stack = new Stack<String>();
             //adds concurrency context of thread to concurrency history
-            insertAllInMapToLists(concurrencyHistories, loc, concurrencyContexts.get(thread));
+            insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
 
             //calculates the new key for the current state of the concurrency history
             Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
@@ -376,7 +406,6 @@ public class MinhaCheckerParallel {
     }
 
     private static void printDataStructures() {
-
         System.out.println("--- THREAD EVENTS ---");
         for (String t : threadExecution.keySet()) {
             System.out.println("#" + t);
