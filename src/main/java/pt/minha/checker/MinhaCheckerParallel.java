@@ -43,7 +43,7 @@ public class MinhaCheckerParallel {
     //Map: thread id -> list of he ids of the messages in the concurrency context
     public static Map<String, List<Long>> concurrencyContexts;
     //Map: location -> concurreny history of that location (set of message ids)
-    public static Map<Integer, Set<Long>> concurrencyHistories;
+    public static Map<String, Set<Long>> concurrencyHistories;
     //Map: hashCode(TETAlocation), thread -> stack of Threads
     public static Map<MyPair<Integer, String>, Stack<String>> stacks;
 
@@ -79,7 +79,7 @@ public class MinhaCheckerParallel {
         //Redundancy-check related initializations
         changedConcurrencyContexts = new HashSet<String>();
         concurrencyContexts = new HashMap<String, List<Long>>();
-        concurrencyHistories = new HashMap<Integer, Set<Long>>();
+        concurrencyHistories = new HashMap<String, Set<Long>>();
         stacks = new HashMap<MyPair<Integer, String>, Stack<String>>();
 
         try {
@@ -94,6 +94,14 @@ public class MinhaCheckerParallel {
 
                 //remove redundant events
                 removeRedundantEvents();
+
+                // Debug info
+                for(Map.Entry<String,List<MyPair<LockEvent, LockEvent>>> e : lockEvents.entrySet()) {
+                    System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                    System.out.println("Thread: " + e.getKey());
+                    System.out.println("List: " + ((e.getValue() != null)? e.getValue().toString(): "Null"));
+                    System.out.println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+                }
 
                 //generate constraint model
                 initSolver();
@@ -130,7 +138,6 @@ public class MinhaCheckerParallel {
                 System.out.println("*** " + rwe.toString());
             }
         }
-
     }
 
     static void printLocks() {
@@ -181,7 +188,7 @@ public class MinhaCheckerParallel {
             System.out.println(cc.getKey() + " : " + cc.getValue().toString());
         }
         System.out.println("Concurrency Histories:");
-        for(int s : concurrencyHistories.keySet()) {
+        for(String s : concurrencyHistories.keySet()) {
             System.out.println(s);
         }
         System.out.println("Stacks:");
@@ -249,7 +256,7 @@ public class MinhaCheckerParallel {
     }
 
     private static boolean checkRedundancy(RWEvent event, String thread) {
-        int loc = event.getLoc();
+        String loc = event.getLoc();
         Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
         MyPair<Integer,String> key = new MyPair<Integer, String>(concurrencyHistory == null? 0 : concurrencyHistory.hashCode(), thread);
         Stack<String> stack = stacks.get(key);
@@ -334,7 +341,7 @@ public class MinhaCheckerParallel {
                 break;
             case READ:
             case WRITE:
-                int loc = event.getInt("loc");
+                String loc = event.getString("loc");
                 String var = event.getString("variable");
                 long counter = event.getLong("counter");
                 RWEvent rwe = new RWEvent(thread, type, loc, var, counter);
