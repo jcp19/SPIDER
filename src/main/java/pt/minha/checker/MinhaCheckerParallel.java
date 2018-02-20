@@ -40,7 +40,7 @@ public class MinhaCheckerParallel {
 
     //Redundancy Elimination structures
     //Map: thread id -> list of he ids of the messages in the concurrency context
-    public static Map<String, List<Long>> concurrencyContexts;
+    public static Map<String, Set<Long>> concurrencyContexts;
     //Map: location -> concurreny history of that location (set of message ids)
     public static Map<String, Set<Long>> concurrencyHistories;
     //Map: hashCode(TETAlocation), thread -> stack of Threads
@@ -78,7 +78,7 @@ public class MinhaCheckerParallel {
 
         //Redundancy-check related initializations
         changedConcurrencyContexts = new HashSet<String>();
-        concurrencyContexts = new HashMap<String, List<Long>>();
+        concurrencyContexts = new HashMap<String, Set<Long>>();
         concurrencyHistories = new HashMap<String, Set<Long>>();
         stacks = new HashMap<MyPair<Integer, String>, Stack<String>>();
 
@@ -96,12 +96,12 @@ public class MinhaCheckerParallel {
                 removeRedundantEvents();
 
                 // Debug info
-                for(Map.Entry<String,List<MyPair<LockEvent, LockEvent>>> e : lockEvents.entrySet()) {
-                    System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-                    System.out.println("Thread: " + e.getKey());
-                    System.out.println("List: " + ((e.getValue() != null)? e.getValue().toString(): "Null"));
-                    System.out.println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-                }
+//                for(Map.Entry<String,List<MyPair<LockEvent, LockEvent>>> e : lockEvents.entrySet()) {
+//                    System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+//                    System.out.println("Thread: " + e.getKey());
+//                    System.out.println("List: " + ((e.getValue() != null)? e.getValue().toString(): "Null"));
+//                    System.out.println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+//                }
 
                 //generate constraint model
                 initSolver();
@@ -156,15 +156,30 @@ public class MinhaCheckerParallel {
     /**
      * Inserts a value in a list associated with a key and creates the
      * list if it doesnt exist already
+     * Returns true iff the value didnt exist before in the list
      */
-    public static <K,V> void insertInMapToLists(Map<K,List<V>> map, K key, V value) {
+    public static <K,V> boolean insertInMapToLists(Map<K,List<V>> map, K key, V value) {
         List<V> values_list = map.get(key);
 
         if(values_list == null) {
             values_list = new ArrayList<V>();
             map.put(key, values_list);
         }
+        boolean contains = values_list.contains(value);
         values_list.add(value);
+        return !contains;
+    }
+
+    public static <K,V> boolean insertInMapToSets(Map<K,Set<V>> map, K key, V value) {
+        Set<V> values_list = map.get(key);
+
+        if(values_list == null) {
+            values_list = new HashSet<V>();
+            map.put(key, values_list);
+        }
+        boolean contains = values_list.contains(value);
+        values_list.add(value);
+        return !contains;
     }
 
     public static <K,V> void insertAllInMapToSet(Map<K,Set<V>> map, K key, Collection<V> values) {
@@ -182,21 +197,26 @@ public class MinhaCheckerParallel {
 
     public static void printDebugInfo() {
         System.out.println("*************************************************");
+
         System.out.println("Concurrency contexts:");
-//        for(String s : concurrencyContexts.keySet()) {
-//            System.out.println(s);
-//        }
-        for(Map.Entry<String, List<Long>> cc : concurrencyContexts.entrySet()) {
+        for(Map.Entry<String, Set<Long>> cc : concurrencyContexts.entrySet()) {
             System.out.println(cc.getKey() + " : " + cc.getValue().toString());
         }
+
         System.out.println("Concurrency Histories:");
-        for(String s : concurrencyHistories.keySet()) {
-            System.out.println(s);
+        for(Map.Entry<String, Set<Long>> cc : concurrencyHistories.entrySet()) {
+            System.out.println(cc.getKey() + " : " + cc.getValue().toString());
         }
+
         System.out.println("Stacks:");
         System.out.println(stacks.entrySet().toString());
+
         System.out.println("Redundant events:");
         System.out.println(redundantEvents.toString());
+
+        System.out.println("Changed contexts:");
+        System.out.println(changedConcurrencyContexts.toString());
+
         System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
     }
 
@@ -220,9 +240,10 @@ public class MinhaCheckerParallel {
                 case UNLOCK:
                     LockEvent le = (LockEvent) e;
                     //temporary use of hashCode
-                    insertInMapToLists(concurrencyContexts, thread, (long) le.getVariable().hashCode());
+                    if(insertInMapToSets(concurrencyContexts, thread, (long) le.getVariable().hashCode())){
+                        changedConcurrencyContexts.add(thread);
+                    }
                     //the concurrency context changed
-                    changedConcurrencyContexts.add(thread);
                     break;
                 //MEM Access
                 case READ:
@@ -241,7 +262,7 @@ public class MinhaCheckerParallel {
 
                 case SND:
                     SocketEvent se = (SocketEvent) e;
-                    insertInMapToLists(concurrencyContexts, thread, se.getMsgId());
+                    insertInMapToSets(concurrencyContexts, thread, se.getMsgId());
                     //the concurrency context changed
                     changedConcurrencyContexts.add(thread);
                     break;
@@ -250,8 +271,8 @@ public class MinhaCheckerParallel {
                     // advance e
                     break;
             }
-            //System.out.println("-- Event " + e.getId() + " : " + e.toString());
-            //printDebugInfo();
+            System.out.println("-- Event " + e.getId() + " : " + e.toString());
+            printDebugInfo();
 
         }
         Stats.redundantEvents = count;
