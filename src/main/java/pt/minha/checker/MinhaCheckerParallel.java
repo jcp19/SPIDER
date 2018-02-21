@@ -35,19 +35,17 @@ public class MinhaCheckerParallel {
     public static Map<String, List<ThreadSyncEvent>> joinSet;                  //Map: thread -> list of thread's join events
     public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
     public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
+
     // Debug data
     public static HashSet<Integer> redundantEvents;
 
     //Redundancy Elimination structures
-    //Map: thread id -> list of he ids of the messages in the concurrency context
+    //Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
     public static Map<String, Set<Long>> concurrencyContexts;
-    //Map: location -> concurreny history of that location (set of message ids)
+    //Map: location -> concurreny history of that location (set of message ids and lock ids)
     public static Map<String, Set<Long>> concurrencyHistories;
-    //Map: hashCode(TETAlocation), thread -> stack of Threads
-    public static Map<MyPair<String, Integer>, Stack<String>> stacks; //Map: (loc,hash teta thread) -> stack
-
-    //Set of threads whose concurrency context was changed
-    public static Set<String> changedConcurrencyContexts;
+    //Map: location,hashCode(TETAthread)-> stack of Threads
+    public static Map<MyPair<String, Integer>, Stack<String>> stacks;
 
     //solver stuff
     public static Solver solver;
@@ -77,7 +75,6 @@ public class MinhaCheckerParallel {
         redundantEvents = new HashSet<Integer>();
 
         //Redundancy-check related initializations
-        changedConcurrencyContexts = new HashSet<String>();
         concurrencyContexts = new HashMap<String, Set<Long>>();
         concurrencyHistories = new HashMap<String, Set<Long>>();
         stacks = new HashMap<MyPair<String, Integer>, Stack<String>>();
@@ -94,14 +91,6 @@ public class MinhaCheckerParallel {
 
                 //remove redundant events
                 removeRedundantEvents();
-
-                // Debug info
-//                for(Map.Entry<String,List<MyPair<LockEvent, LockEvent>>> e : lockEvents.entrySet()) {
-//                    System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-//                    System.out.println("Thread: " + e.getKey());
-//                    System.out.println("List: " + ((e.getValue() != null)? e.getValue().toString(): "Null"));
-//                    System.out.println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-//                }
 
                 //generate constraint model
                 initSolver();
@@ -214,17 +203,13 @@ public class MinhaCheckerParallel {
         System.out.println("Redundant events:");
         System.out.println(redundantEvents.toString());
 
-        System.out.println("Changed contexts:");
-        System.out.println(changedConcurrencyContexts.toString());
-
         System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
     }
 
     public static void removeRedundantEvents() {
         // Assumptions:
         // - The order of the events iterator corresponds to the chronological order of the events
-        // !CHANGED!: - the function getStack in ReX depends on the current state of teta-loc and Gama-t
-        // - Teta-t and Gama-t can only grow or stay the same, never decrease during ReX
+        // - the function getStack in ReX depends on the current state of teta-loc
 
         long count = 0;
         EventIterator events = new EventIterator(threadExecution.values());
@@ -250,7 +235,7 @@ public class MinhaCheckerParallel {
                     if(checkRedundancy(rwe, thread)) {
                         //if an event is redundant, remove from the trace
                         events.remove();
-                        //DEBUG
+                        //DEBUG info
                         redundantEvents.add(e.getId());
                         //remove from readSet and writeSet
                         (type == READ? readSet : writeSet).get(rwe.getVariable()).remove(rwe);
@@ -262,14 +247,12 @@ public class MinhaCheckerParallel {
                     SocketEvent se = (SocketEvent) e;
                     insertInMapToSets(concurrencyContexts, thread, se.getMsgId());
                     //the concurrency context changed
-                    changedConcurrencyContexts.add(thread); //this line might be removed
                     break;
                 case CREATE:
                     // handles CREATE events the same way it handles SND
                     ThreadSyncEvent tse = (ThreadSyncEvent) e;
                     insertInMapToSets(concurrencyContexts, thread, (long) tse.hashCode());
                     break;
-
 
                 default:
                     // advance e
@@ -289,7 +272,7 @@ public class MinhaCheckerParallel {
         MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLoc(), concurrencyContext==null?0:concurrencyContext.hashCode());
         Stack<String> stack = stacks.get(key);
 
-        if(stack == null /*|| changedConcurrencyContexts.contains(thread) */) {
+        if(stack == null) {
             //the stack is empty or the concurrency context of the thread was changed: in both
             //cases, we need a new stack
             stack = new Stack<String>();
@@ -297,13 +280,11 @@ public class MinhaCheckerParallel {
             insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
 
             //calculates the new key for the current state of the concurrency history
-            Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
+            // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
             MyPair<String,Integer> newKey = new MyPair<String, Integer>(event.getLoc(),concurrencyContext==null?0:concurrencyContext.hashCode() );
             stacks.put(newKey, stack);
 
             stack.push(thread);
-            //marks the concurrency of the thread as unchenaged if it isnt already
-            //changedConcurrencyContexts.remove(thread);
             return false;
         } else if(stack.contains(thread) || stack.size() == 2) {
             //if the stack already contains the thread or is full
