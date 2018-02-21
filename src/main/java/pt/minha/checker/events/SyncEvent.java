@@ -1,12 +1,12 @@
 package pt.minha.checker.events;
 
-public class LockEvent extends Event {
+public class SyncEvent extends Event {
     String loc;
     String var;
     // unique identifier of lock/unlock events
     long counter;
 
-    public LockEvent(String thread, EventType type, String loc, String var, long counter) {
+    public SyncEvent(String thread, EventType type, String loc, String var, long counter) {
         super(thread, type);
         this.loc = loc;
         this.var = var;
@@ -39,7 +39,7 @@ public class LockEvent extends Event {
 
     @Override
     public String toString() {
-        String res = type+"_"+thread+"_"+var+"_"+counter+"@"+loc;
+        String res = type+"_"+var+"_"+thread+"_"+counter+"@"+loc;
         return res;
     }
 }

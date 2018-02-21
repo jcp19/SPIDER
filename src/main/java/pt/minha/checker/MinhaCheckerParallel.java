@@ -14,8 +14,7 @@ import java.io.InputStream;
 import java.util.*;
 
 import static javax.swing.UIManager.get;
-import static pt.minha.checker.events.EventType.LOCK;
-import static pt.minha.checker.events.EventType.READ;
+import static pt.minha.checker.events.EventType.*;
 
 /**
  * Created by nunomachado on 30/03/17.
@@ -26,13 +25,15 @@ public class MinhaCheckerParallel {
     public static Properties props;
 
     //data structures
-    public static Map<Long, MyPair<SocketEvent, SocketEvent>> msgEvents;       //Map: message id -> pair of events (snd,rcv)
-    public static Map<String, List<MyPair<LockEvent, LockEvent>>> lockEvents;  //Map: variable -> list of pairs of locks/unlocks
-    public static Map<String, List<Event>> threadExecution;                    //Map: thread -> list of all events in that thread's execution
-    public static Map<String, List<RWEvent>> readSet;                          //Map: variable -> list of reads to that variable by all threads
-    public static Map<String, List<RWEvent>> writeSet;                         //Map: variable -> list of writes to that variable by all threads
-    public static Map<String, List<ThreadSyncEvent>> forkSet;                  //Map: thread -> list of thread's fork events
-    public static Map<String, List<ThreadSyncEvent>> joinSet;                  //Map: thread -> list of thread's join events
+    public static Map<Long, MyPair<SocketEvent, SocketEvent>> msgEvents;        //Map: message id -> pair of events (snd,rcv)
+    public static Map<String, List<MyPair<SyncEvent, SyncEvent>>> lockEvents;   //Map: mutex -> list of pairs of locks/unlocks
+    public static Map<String, List<Event>> threadExecution;                     //Map: thread -> list of all events in that thread's execution
+    public static Map<String, List<RWEvent>> readSet;                           //Map: variable -> list of reads to that variable by all threads
+    public static Map<String, List<RWEvent>> writeSet;                          //Map: variable -> list of writes to that variable by all threads
+    public static Map<String, List<ThreadCreationEvent>> forkSet;               //Map: thread -> list of thread's fork events
+    public static Map<String, List<ThreadCreationEvent>> joinSet;               //Map: thread -> list of thread's join events
+    public static Map<String, List<SyncEvent>> waitSet;                         //Map: condition variable -> list of thread's wait events
+    public static Map<String, List<SyncEvent>> notifySet;                       //Map: condition variable -> list of thread's notify events
     public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
     public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
 
@@ -62,12 +63,14 @@ public class MinhaCheckerParallel {
 
     public static void main(String args[]) {
         msgEvents = new HashMap<Long, MyPair<SocketEvent, SocketEvent>>();
-        lockEvents = new HashMap<String, List<MyPair<LockEvent,LockEvent>>>();
+        lockEvents = new HashMap<String, List<MyPair<SyncEvent,SyncEvent>>>();
         threadExecution = new HashMap<String, List<Event>>();
         readSet = new HashMap<String, List<RWEvent>>();
         writeSet = new HashMap<String, List<RWEvent>>();
-        forkSet = new HashMap<String, List<ThreadSyncEvent>>();
-        joinSet = new HashMap<String, List<ThreadSyncEvent>>();
+        forkSet = new HashMap<String, List<ThreadCreationEvent>>();
+        joinSet = new HashMap<String, List<ThreadCreationEvent>>();
+        waitSet = new HashMap<String, List<SyncEvent>>();
+        notifySet = new HashMap<String, List<SyncEvent>>();
         dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
 
@@ -90,7 +93,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                removeRedundantEvents();
+                //removeRedundantEvents();
 
                 //generate constraint model
                 initSolver();
@@ -99,6 +102,7 @@ public class MinhaCheckerParallel {
                 genCommunicationConstraints();
                 genForkStartConstraints();
                 genJoinExitConstraints();
+                genWaitNotifyConstraints();
                 genLockingConstraints();
                 Stats.buildingModeltime = System.currentTimeMillis() - modelStart;
 
@@ -133,8 +137,8 @@ public class MinhaCheckerParallel {
 
     static void printLocks() {
         System.out.println("*** LOCK SET");
-        for(List<MyPair<LockEvent, LockEvent>> eventList : lockEvents.values()) {
-            for(MyPair<LockEvent, LockEvent> e : eventList) {
+        for(List<MyPair<SyncEvent, SyncEvent>> eventList : lockEvents.values()) {
+            for(MyPair<SyncEvent, SyncEvent> e : eventList) {
                 String fst = e.getFirst() != null? e.getFirst().toString() : null;
                 String snd = e.getSecond() != null? e.getSecond().toString() : null;
                 System.out.println("*** " + fst  +" -> " + snd);
@@ -223,7 +227,7 @@ public class MinhaCheckerParallel {
 
             switch (type) {
                 case UNLOCK:
-                    LockEvent le = (LockEvent) e;
+                    SyncEvent le = (SyncEvent) e;
                     //temporary use of hashCode
                     insertInMapToSets(concurrencyContexts, thread, (long) le.getVariable().hashCode());
                     //the concurrency context changed
@@ -250,10 +254,9 @@ public class MinhaCheckerParallel {
                     break;
                 case CREATE:
                     // handles CREATE events the same way it handles SND
-                    ThreadSyncEvent tse = (ThreadSyncEvent) e;
+                    ThreadCreationEvent tse = (ThreadCreationEvent) e;
                     insertInMapToSets(concurrencyContexts, thread, (long) tse.hashCode());
                     break;
-
                 default:
                     // advance e
                     break;
@@ -323,8 +326,8 @@ public class MinhaCheckerParallel {
         //initialize thread map data structures
         if (!threadExecution.containsKey(thread)) {
             threadExecution.put(thread, new LinkedList<Event>());
-            forkSet.put(thread, new LinkedList<ThreadSyncEvent>());
-            joinSet.put(thread, new LinkedList<ThreadSyncEvent>());
+            forkSet.put(thread, new LinkedList<ThreadCreationEvent>());
+            joinSet.put(thread, new LinkedList<ThreadCreationEvent>());
         }
 
         //populate data structures
@@ -383,37 +386,50 @@ public class MinhaCheckerParallel {
             case CREATE:
             case JOIN:
                 String child = event.getString("child");
-                Event tse = new ThreadSyncEvent(thread, type, child);
+                Event tse = new ThreadCreationEvent(thread, type, child);
                 threadExecution.get(thread).add(tse);
                 if (type == EventType.CREATE)
-                    forkSet.get(thread).add((ThreadSyncEvent) tse);
+                    forkSet.get(thread).add((ThreadCreationEvent) tse);
                 else
-                    joinSet.get(thread).add((ThreadSyncEvent) tse);
+                    joinSet.get(thread).add((ThreadCreationEvent) tse);
                 break;
             case LOCK:
             case UNLOCK:
+            case NOTIFY:
+            case NOTIFYALL:
+            case WAIT:
                 String location = event.getString("loc");
                 String variable = event.getString("variable");
                 long count = event.getLong("counter");
-                LockEvent lockEvent = new LockEvent(thread, type, location, variable, count);
-                threadExecution.get(thread).add(lockEvent);
+                SyncEvent syncEvent = new SyncEvent(thread, type, location, variable, count);
+                threadExecution.get(thread).add(syncEvent);
                 if (type == LOCK) {
-                    List<MyPair<LockEvent, LockEvent>> pairList = lockEvents.get(variable);
-                    MyPair<LockEvent,LockEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
+                    List<MyPair<SyncEvent, SyncEvent>> pairList = lockEvents.get(variable);
+                    MyPair<SyncEvent,SyncEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
                     if(pair == null || pair.getSecond() != null) {
                         // Only adds the lock event if the previous lock event has a corresponding unlock
                         // in order to handle Reentrant Locks
-                        insertInMapToLists(lockEvents, variable, new MyPair<LockEvent, LockEvent>(lockEvent, null));
+                        insertInMapToLists(lockEvents, variable, new MyPair<SyncEvent, SyncEvent>(syncEvent, null));
                     }
-                } else {
+                } else if (type == UNLOCK) {
                     // second component is the unlock event associated with the lock
-                    List<MyPair<LockEvent, LockEvent>> pairList = lockEvents.get(variable);
-                    MyPair<LockEvent,LockEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
+                    List<MyPair<SyncEvent, SyncEvent>> pairList = lockEvents.get(variable);
+                    MyPair<SyncEvent,SyncEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
                     if(pair == null) {
-                        insertInMapToLists(lockEvents, variable, new MyPair<LockEvent, LockEvent>(null,lockEvent));
+                        insertInMapToLists(lockEvents, variable, new MyPair<SyncEvent, SyncEvent>(null, syncEvent));
                     } else {
-                        pair.setSecond(lockEvent);
+                        pair.setSecond(syncEvent);
                     }
+                } else if (type == WAIT) {
+                    if(!waitSet.containsKey(variable)){
+                        waitSet.put(variable, new LinkedList<SyncEvent>());
+                    }
+                    waitSet.get(variable).add(syncEvent);
+                } else if (type == NOTIFY || type == NOTIFYALL) {
+                    if(!notifySet.containsKey(variable)){
+                        notifySet.put(variable, new LinkedList<SyncEvent>());
+                    }
+                    notifySet.get(variable).add(syncEvent);
                 }
                 break;
             default:
@@ -450,13 +466,13 @@ public class MinhaCheckerParallel {
         }
 
         System.out.println("\n--- FORK EVENTS ---");
-        for (List<ThreadSyncEvent> fset : forkSet.values()) {
+        for (List<ThreadCreationEvent> fset : forkSet.values()) {
             for (Event f : fset) {
                 System.out.println(f);
             }
         }
         System.out.println("\n--- JOIN EVENTS ---");
-        for (List<ThreadSyncEvent> jset : joinSet.values()) {
+        for (List<ThreadCreationEvent> jset : joinSet.values()) {
             for (Event j : jset) {
                 System.out.println(j);
             }
@@ -677,8 +693,8 @@ public class MinhaCheckerParallel {
     public static void genForkStartConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate fork-start constraints");
         solver.writeComment("FORK-START CONSTRAINTS");
-        for(List<ThreadSyncEvent> l : forkSet.values()){
-            for(ThreadSyncEvent e : l){
+        for(List<ThreadCreationEvent> l : forkSet.values()){
+            for(ThreadCreationEvent e : l){
                 String cnst = solver.cLt(e.toString(), "START_"+e.getChild());
                 solver.writeConst(solver.postAssert(cnst));
             }
@@ -688,8 +704,8 @@ public class MinhaCheckerParallel {
     public static void genJoinExitConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate join-end constraints");
         solver.writeComment("JOIN-END CONSTRAINTS");
-        for(List<ThreadSyncEvent> l : joinSet.values()){
-            for(ThreadSyncEvent e : l){
+        for(List<ThreadCreationEvent> l : joinSet.values()){
+            for(ThreadCreationEvent e : l){
                 String cnst = solver.cLt("END_"+e.getChild(), e.toString());
                 solver.writeConst(solver.postAssert(cnst));
             }
@@ -703,16 +719,16 @@ public class MinhaCheckerParallel {
         for(String var : lockEvents.keySet()){
             // for two lock/unlock pairs on the same locking object,
             // one pair must be executed either before or after the other
-            ListIterator<MyPair<LockEvent, LockEvent>> pairIterator_i = lockEvents.get(var).listIterator(0);
-            ListIterator<MyPair<LockEvent, LockEvent>> pairIterator_j;
+            ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_i = lockEvents.get(var).listIterator(0);
+            ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_j;
 
             while(pairIterator_i.hasNext()){
-                MyPair<LockEvent, LockEvent> pair_i = pairIterator_i.next();
+                MyPair<SyncEvent, SyncEvent> pair_i = pairIterator_i.next();
                 //advance iterator to have two different pairs
                 pairIterator_j =  lockEvents.get(var).listIterator(pairIterator_i.nextIndex());
 
                 while(pairIterator_j.hasNext()) {
-                    MyPair<LockEvent, LockEvent> pair_j = pairIterator_j.next();
+                    MyPair<SyncEvent, SyncEvent> pair_j = pairIterator_j.next();
 
                     //there is no need to add constraints for locking pairs of the same thread
                     //as they are already encoded in the program order constraints
@@ -725,6 +741,48 @@ public class MinhaCheckerParallel {
                     String cnst = solver.cOr(cnstUi_Lj, cnstUj_Li);
                     solver.writeConst(solver.postAssert(cnst));
                 }
+            }
+        }
+    }
+
+
+    public static void genWaitNotifyConstraints() throws IOException {
+        System.out.println("[MinhaChecker] Generate locking constraints");
+        solver.writeComment("WAIT-NOTIFY CONSTRAINTS");
+        HashMap<SyncEvent, List<String>> binaryVars = new HashMap<SyncEvent, List<String>>(); //map: notify event -> list of all binary vars corresponding to that notify
+
+        //for a given condition, each notify can be mapped to any wait
+        //but a wait can only have a single notify
+        for(String condition : waitSet.keySet()){
+            for(SyncEvent wait : waitSet.get(condition)) {
+                StringBuilder globalOr = new StringBuilder();
+
+                for(SyncEvent notify : notifySet.get(condition)){
+                    //binary var used to indicate whether the signal operation is mapped to a wait operation or not
+                    String binVar = "B_"+condition+"-W_" + wait.getThread()+"_"+wait.getCounter()+"-N_"+notify.getThread()+"_"+notify.getCounter();
+
+                    if(!binaryVars.containsKey(notify)){
+                        binaryVars.put(notify, new ArrayList<String>());
+                    }
+                    binaryVars.get(notify).add(binVar);
+
+                    //const: Oa_sg < Oa_wt && b^{a_sg}_{a_wt} = 1
+                    globalOr.append(solver.cAnd(solver.cLt(notify.toString(), wait.toString()), solver.cEq(binVar, "1")));
+                    solver.writeConst(solver.declareIntVar(binVar, 0, 1));
+                }
+                solver.writeConst(solver.postAssert(solver.cOr(globalOr.toString())));
+            }
+        }
+
+        //add constraints stating that a given notify can only be mapped to a single wait operation
+        for(SyncEvent notify : binaryVars.keySet()){
+            //for notifyAll, we don't constrain the number of waits that can be matched with this notify
+            if(notify.getType() == NOTIFYALL) {
+                //const: Sum_{x \in WT} b^{a_sg}_{x} >= 0
+                solver.writeConst(solver.postAssert(solver.cGeq(solver.cSummation(binaryVars.get(notify)), "0")));
+            } else{
+                //const: Sum_{x \in WT} b^{a_sg}_{x} <= 1
+                solver.writeConst(solver.postAssert(solver.cLeq(solver.cSummation(binaryVars.get(notify)), "1")));
             }
         }
     }

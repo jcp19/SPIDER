@@ -74,7 +74,7 @@ public class RWEvent extends Event {
 
     @Override
     public String toString() {
-        String res = type+"_"+thread+"_"+var+"_"+counter+"@"+loc;
+        String res = type+"_"+var+"_"+thread+"_"+counter+"@"+loc;
         return res;
     }
 }

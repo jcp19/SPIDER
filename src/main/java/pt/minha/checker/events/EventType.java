@@ -24,7 +24,12 @@ public enum EventType {
 
     // lock and unlock events
     LOCK("LOCK"),
-    UNLOCK("UNLOCK");
+    UNLOCK("UNLOCK"),
+
+    //thread synchronization events
+    WAIT("WAIT"),
+    NOTIFY("NOTIFY"),
+    NOTIFYALL("NOTIFYALL");
 
     private final String desc;
 
@@ -70,6 +75,12 @@ public enum EventType {
             return EventType.LOCK;
         else if(type.equals("UNLOCK"))
             return EventType.UNLOCK;
+        else if(type.equals("WAIT"))
+            return EventType.WAIT;
+        else if(type.equals("NOTIFY"))
+            return EventType.NOTIFY;
+        else if(type.equals("NOTIFYALL"))
+            return EventType.NOTIFYALL;
         else
             return null;
     }

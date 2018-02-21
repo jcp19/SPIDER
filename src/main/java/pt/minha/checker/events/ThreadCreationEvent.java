@@ -3,10 +3,10 @@ package pt.minha.checker.events;
 /**
  * Created by nunomachado on 31/03/17.
  */
-public class ThreadSyncEvent extends Event{
+public class ThreadCreationEvent extends Event{
     String child;
 
-    public ThreadSyncEvent(String thread, EventType type, String child) {
+    public ThreadCreationEvent(String thread, EventType type, String child) {
         super(thread, type);
         this.child = child;
     }
@@ -32,7 +32,7 @@ public class ThreadSyncEvent extends Event{
 
         if (o == null || getClass() != o.getClass()) return false;
 
-        ThreadSyncEvent tmp = (ThreadSyncEvent)o;
+        ThreadCreationEvent tmp = (ThreadCreationEvent)o;
         return (tmp.getThread().equals(this.thread)
                 && tmp.getType() == this.type
                 && tmp.getChild().equals(this.child)

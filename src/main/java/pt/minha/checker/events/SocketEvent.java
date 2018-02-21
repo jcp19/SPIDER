@@ -91,7 +91,7 @@ public class SocketEvent extends Event {
 
     @Override
     public String toString() {
-        String res = type+"_"+thread+"_"+msgId;
+        String res = type+"_"+msgId+"_"+thread;
         return res;
     }
 }
