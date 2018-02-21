@@ -44,7 +44,7 @@ public class MinhaCheckerParallel {
     //Map: location -> concurreny history of that location (set of message ids)
     public static Map<String, Set<Long>> concurrencyHistories;
     //Map: hashCode(TETAlocation), thread -> stack of Threads
-    public static Map<MyPair<String, String>, Stack<String>> stacks; //Map: (loc,thread) -> stack
+    public static Map<MyPair<String, Integer>, Stack<String>> stacks; //Map: (loc,hash teta thread) -> stack
 
     //Set of threads whose concurrency context was changed
     public static Set<String> changedConcurrencyContexts;
@@ -80,7 +80,7 @@ public class MinhaCheckerParallel {
         changedConcurrencyContexts = new HashSet<String>();
         concurrencyContexts = new HashMap<String, Set<Long>>();
         concurrencyHistories = new HashMap<String, Set<Long>>();
-        stacks = new HashMap<MyPair<String, String>, Stack<String>>();
+        stacks = new HashMap<MyPair<String, Integer>, Stack<String>>();
 
         try {
             String propFile = "checker.racedetection.properties";
@@ -240,10 +240,7 @@ public class MinhaCheckerParallel {
                 case UNLOCK:
                     LockEvent le = (LockEvent) e;
                     //temporary use of hashCode
-                    if(insertInMapToSets(concurrencyContexts, thread, (long) le.getVariable().hashCode())){
-                        // TODO: remove this line
-                        changedConcurrencyContexts.add(thread);
-                    }
+                    insertInMapToSets(concurrencyContexts, thread, (long) le.getVariable().hashCode());
                     //the concurrency context changed
                     break;
                 //MEM Access
@@ -288,7 +285,8 @@ public class MinhaCheckerParallel {
     private static boolean checkRedundancy(RWEvent event, String thread) {
         String loc = event.getLoc();
         Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
-        MyPair<String,String> key = new MyPair<String, String>(event.getLoc(), thread);
+        Set<Long> concurrencyContext = concurrencyContexts.get(thread);
+        MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLoc(), concurrencyContext==null?0:concurrencyContext.hashCode());
         Stack<String> stack = stacks.get(key);
 
         if(stack == null /*|| changedConcurrencyContexts.contains(thread) */) {
@@ -300,8 +298,8 @@ public class MinhaCheckerParallel {
 
             //calculates the new key for the current state of the concurrency history
             Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
-            MyPair<String,String> newKey = new MyPair<String, String>(event.getLoc(), thread);
-            stacks.put(key, stack);
+            MyPair<String,Integer> newKey = new MyPair<String, Integer>(event.getLoc(),concurrencyContext==null?0:concurrencyContext.hashCode() );
+            stacks.put(newKey, stack);
 
             stack.push(thread);
             //marks the concurrency of the thread as unchenaged if it isnt already
