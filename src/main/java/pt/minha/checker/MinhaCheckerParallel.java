@@ -93,7 +93,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                //removeRedundantEvents();
+                removeRedundantEvents();
 
                 //generate constraint model
                 initSolver();
