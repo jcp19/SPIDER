@@ -241,6 +241,7 @@ public class MinhaCheckerParallel {
                     LockEvent le = (LockEvent) e;
                     //temporary use of hashCode
                     if(insertInMapToSets(concurrencyContexts, thread, (long) le.getVariable().hashCode())){
+                        // TODO: remove this line
                         changedConcurrencyContexts.add(thread);
                     }
                     //the concurrency context changed
@@ -264,8 +265,14 @@ public class MinhaCheckerParallel {
                     SocketEvent se = (SocketEvent) e;
                     insertInMapToSets(concurrencyContexts, thread, se.getMsgId());
                     //the concurrency context changed
-                    changedConcurrencyContexts.add(thread);
+                    changedConcurrencyContexts.add(thread); //this line might be removed
                     break;
+                case CREATE:
+                    // handles CREATE events the same way it handles SND
+                    ThreadSyncEvent tse = (ThreadSyncEvent) e;
+                    insertInMapToSets(concurrencyContexts, thread, (long) tse.hashCode());
+                    break;
+
 
                 default:
                     // advance e

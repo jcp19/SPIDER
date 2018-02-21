@@ -38,4 +38,9 @@ public class ThreadSyncEvent extends Event{
                 && tmp.getChild().equals(this.child)
         );
     }
+
+    @Override
+    public int hashCode() {
+        return toString().hashCode();
+    }
 }
