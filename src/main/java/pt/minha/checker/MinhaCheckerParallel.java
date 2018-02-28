@@ -93,7 +93,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                removeRedundantEvents();
+                //removeRedundantEvents();
 
                 //generate constraint model
                 initSolver();
@@ -339,7 +339,8 @@ public class MinhaCheckerParallel {
                 String src = event.getString("src");
                 String socketId = event.getString("socket");
                 long timestamp = event.getLong("timestamp");
-                SocketEvent se = new SocketEvent(thread, type, msgId, src, dst, socketId, timestamp);
+                String channel = event.getString("channel");
+                SocketEvent se = new SocketEvent(thread, type, msgId, src, dst, socketId, timestamp, channel, threadExecution.get(thread).size());
 
                 //the send event must always appear before the receive one
                 //so it suffices to create the entry only in the former case
@@ -517,7 +518,7 @@ public class MinhaCheckerParallel {
         }//*/
     }
 
-    public static void genMsgRaceCandidates(){
+    public static void genMsgRaceCandidates() throws IOException {
         // generate all pairs of message race candidates
         // a pair of RCV operations is a candidate if:
         // a) both occur at the same node
@@ -526,6 +527,7 @@ public class MinhaCheckerParallel {
         ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_i = list.listIterator(0);
         ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_j;
 
+        solver.writeComment("SOCKET CHANNEL CONSTRAINTS");
         while(pairIterator_i.hasNext()){
             SocketEvent rcv1 = pairIterator_i.next().getSecond();
             //advance iterator to have two different pairs
@@ -538,15 +540,37 @@ public class MinhaCheckerParallel {
                     //two RCV events are racing if their respective SND events have the same order
                     SocketEvent snd1 = msgEvents.get(rcv1.getMsgId()).getFirst();
                     SocketEvent snd2 = msgEvents.get(rcv2.getMsgId()).getFirst();
-                    MyPair<SocketEvent,SocketEvent> raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd1,snd2);
+                    MyPair<SocketEvent,SocketEvent> raceCandidate;
+
+                    if(snd1.getTraceOrder() < snd2.getTraceOrder())
+                        raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd2,rcv1);
+                    else
+                        raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd1,rcv2);
                     msgRaceCandidates.add(raceCandidate);
+
+                    //if socket channel is TCP and SNDs are from the same thread,
+                    // then add constraint stating that RCV1 happens before SND2
+                    if(snd1.getChannel() == SocketEvent.ChannelType.TCP
+                            && snd2.getChannel() == SocketEvent.ChannelType.TCP
+                            && snd1.getThread().equals(snd2.getThread())){
+
+                        String cnst;
+                        //check trace order of SND, as the iterator does not traverse the events
+                        //according to the program order
+                        if(snd1.getTraceOrder() < snd2.getTraceOrder())
+                            cnst = solver.cLt(rcv1.toString(), snd2.toString());
+                        else
+                            cnst = solver.cLt(rcv2.toString(), snd1.toString());
+                        solver.writeConst(solver.postNamedAssert(cnst,"TCP"));
+                    }
                 }
             }
         }
 
         //DEBUG: print candidate pairs
-        /*for(MyPair<? extends Event,? extends Event> pair : msgRaceCandidates){
-            System.out.println(pair);
+        /*System.out.println("Message Race candidates: ");
+        for(MyPair<? extends Event,? extends Event> pair : msgRaceCandidates){
+            System.out.println("\t"+pair);
         }//*/
     }
 
@@ -650,7 +674,7 @@ public class MinhaCheckerParallel {
                     //naive way of ensuring that the constraint is written
                     // solely when there is more than one event in globalConstHead
                     if(globalConstHead.indexOf("@") != globalConstHead.lastIndexOf("@"))
-                        solver.writeConst(solver.postAssert(solver.cLt(globalConstHead)));
+                        solver.writeConst(solver.postNamedAssert(solver.cLt(globalConstHead), "PC"));
 
                     //i) write order constraints within receive handling blocks
                     //ii) write that last event from head sequence happens before the receive events
@@ -685,7 +709,7 @@ public class MinhaCheckerParallel {
         for (MyPair<SocketEvent, SocketEvent> pair : msgEvents.values()) {
             if(pair.getFirst()!= null && pair.getSecond()!=null) {
                 String cnst = solver.cLt(pair.getFirst().toString(), pair.getSecond().toString());
-                solver.writeConst(solver.postAssert(cnst));
+                solver.writeConst(solver.postNamedAssert(cnst,"COM"));
             }
         }
     }
@@ -696,7 +720,7 @@ public class MinhaCheckerParallel {
         for(List<ThreadCreationEvent> l : forkSet.values()){
             for(ThreadCreationEvent e : l){
                 String cnst = solver.cLt(e.toString(), "START_"+e.getChild());
-                solver.writeConst(solver.postAssert(cnst));
+                solver.writeConst(solver.postNamedAssert(cnst,"FS"));
             }
         }
     }
@@ -707,7 +731,7 @@ public class MinhaCheckerParallel {
         for(List<ThreadCreationEvent> l : joinSet.values()){
             for(ThreadCreationEvent e : l){
                 String cnst = solver.cLt("END_"+e.getChild(), e.toString());
-                solver.writeConst(solver.postAssert(cnst));
+                solver.writeConst(solver.postNamedAssert(cnst,"JE"));
             }
         }
     }
@@ -739,7 +763,7 @@ public class MinhaCheckerParallel {
                     String cnstUi_Lj = solver.cLt(pair_i.getSecond().toString(), pair_j.getFirst().toString());
                     String cnstUj_Li = solver.cLt(pair_j.getSecond().toString(), pair_i.getFirst().toString());
                     String cnst = solver.cOr(cnstUi_Lj, cnstUj_Li);
-                    solver.writeConst(solver.postAssert(cnst));
+                    solver.writeConst(solver.postNamedAssert(cnst,"LC"));
                 }
             }
         }
@@ -770,7 +794,7 @@ public class MinhaCheckerParallel {
                     globalOr.append(solver.cAnd(solver.cLt(notify.toString(), wait.toString()), solver.cEq(binVar, "1")));
                     solver.writeConst(solver.declareIntVar(binVar, 0, 1));
                 }
-                solver.writeConst(solver.postAssert(solver.cOr(globalOr.toString())));
+                solver.writeConst(solver.postNamedAssert(solver.cOr(globalOr.toString()),"WN"));
             }
         }
 
@@ -779,10 +803,10 @@ public class MinhaCheckerParallel {
             //for notifyAll, we don't constrain the number of waits that can be matched with this notify
             if(notify.getType() == NOTIFYALL) {
                 //const: Sum_{x \in WT} b^{a_sg}_{x} >= 0
-                solver.writeConst(solver.postAssert(solver.cGeq(solver.cSummation(binaryVars.get(notify)), "0")));
+                solver.writeConst(solver.postNamedAssert(solver.cGeq(solver.cSummation(binaryVars.get(notify)), "0"), "WN"));
             } else{
                 //const: Sum_{x \in WT} b^{a_sg}_{x} <= 1
-                solver.writeConst(solver.postAssert(solver.cLeq(solver.cSummation(binaryVars.get(notify)), "1")));
+                solver.writeConst(solver.postNamedAssert(solver.cLeq(solver.cSummation(binaryVars.get(notify)), "1"),"WN"));
             }
         }
     }

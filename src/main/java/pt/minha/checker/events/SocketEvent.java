@@ -4,19 +4,31 @@ package pt.minha.checker.events;
  * Created by nunomachado on 31/03/17.
  */
 public class SocketEvent extends Event {
+
+    public enum ChannelType { TCP, UDP };
+
     long msgId;
     String src;
     String dst;
     String socketId;
     long timestamp;
+    ChannelType channel;
+    //represents the n-th event in a thread's local trace
+    //(used to compare the order of SND events when encoding TCP constraints)
+    int traceOrder;
 
-    public SocketEvent(String thread, EventType type, long msgId, String src, String dst, String socketId, long timestamp) {
+    public SocketEvent(String thread, EventType type, long msgId, String src, String dst, String socketId, long timestamp, String channel, int localOrder) {
         super(thread, type);
         this.msgId = msgId;
         this.src = src;
         this.dst = dst;
         this.socketId = socketId;
         this.timestamp = timestamp;
+        if(channel.equals("TCP"))
+            this.channel = ChannelType.TCP;
+        else
+            this.channel = ChannelType.UDP;
+        this.traceOrder = localOrder;
     }
 
     public long getMsgId() {
@@ -58,6 +70,23 @@ public class SocketEvent extends Event {
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
     }
+
+    public int getTraceOrder() {
+        return traceOrder;
+    }
+
+    public void setTraceOrder(int traceOrder) {
+        this.traceOrder = traceOrder;
+    }
+
+    public ChannelType getChannel() {
+        return channel;
+    }
+
+    public void setChannel(ChannelType channel) {
+        this.channel = channel;
+    }
+
 
     public boolean conflictsWith(SocketEvent e){
         //two socket events conflict if:

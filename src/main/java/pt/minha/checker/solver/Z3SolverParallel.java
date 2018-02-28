@@ -226,7 +226,7 @@ public class Z3SolverParallel implements Solver {
 
     public String postNamedAssert(String constraint, String label) {
         Stats.numConstraints++;
-        return ("(assert (! "+constraint+":named "+label+"))");
+        return ("(assert (! "+constraint+":named "+label+Stats.numConstraints+"))");
     }
 
     public String push(){
@@ -278,7 +278,9 @@ public class Z3SolverParallel implements Solver {
         public boolean checkRace(String e1, String e2){
             try {
                 writers[id].write(push()+"\n");
-                writers[id].write(postAssert(cEq(e1, e2))+"\n");
+                String conflictConst = postNamedAssert(cEq(e1, e2), ("RACE"+Stats.numConstraints++));
+                //System.out.println("CONSTRAINT: "+conflictConst);
+                writers[id].write(conflictConst+"\n");
                 writers[id].write(checkSat()+"\n");
                 writers[id].write(pop()+"\n");
                 writers[id].flush();
