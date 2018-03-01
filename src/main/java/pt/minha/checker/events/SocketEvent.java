@@ -10,6 +10,8 @@ public class SocketEvent extends Event {
     long msgId;
     String src;
     String dst;
+    int src_port;
+    int dst_port;
     String socketId;
     long timestamp;
     ChannelType channel;
@@ -29,6 +31,8 @@ public class SocketEvent extends Event {
         else
             this.channel = ChannelType.UDP;
         this.traceOrder = localOrder;
+        this.src_port = -1;
+        this.dst_port = -1;
     }
 
     public long getMsgId() {
@@ -87,6 +91,21 @@ public class SocketEvent extends Event {
         this.channel = channel;
     }
 
+    public int getSrcPort() {
+        return src_port;
+    }
+
+    public void setSrcPort(int src_port) {
+        this.src_port = src_port;
+    }
+
+    public int getDstPort() {
+        return dst_port;
+    }
+
+    public void setDstPort(int dst_port) {
+        this.dst_port = dst_port;
+    }
 
     public boolean conflictsWith(SocketEvent e){
         //two socket events conflict if:
@@ -97,7 +116,7 @@ public class SocketEvent extends Event {
             return false;
 
         return (this.dst.equals(e.getDst())
-                && this.socketId.equals(e.getSocketId())
+                && this.getDstPort() == e.getDstPort()
                 && !this.equals(e));
     }
 

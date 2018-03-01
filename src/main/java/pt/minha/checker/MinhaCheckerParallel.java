@@ -341,6 +341,8 @@ public class MinhaCheckerParallel {
                 long timestamp = event.getLong("timestamp");
                 String channel = event.getString("channel");
                 SocketEvent se = new SocketEvent(thread, type, msgId, src, dst, socketId, timestamp, channel, threadExecution.get(thread).size());
+                se.setSrcPort(event.getInt("src_port"));
+                se.setDstPort(event.getInt("dst_port"));
 
                 //the send event must always appear before the receive one
                 //so it suffices to create the entry only in the former case
@@ -513,7 +515,8 @@ public class MinhaCheckerParallel {
         }
 
         //DEBUG: print candidate pairs
-        /*for(MyPair<RWEvent,RWEvent> pair : dataRaceCandidates){
+        System.out.println("Data Race candidates: ");
+        for(MyPair<? extends Event,? extends Event> pair : dataRaceCandidates){
             System.out.println(pair);
         }//*/
     }
@@ -530,11 +533,17 @@ public class MinhaCheckerParallel {
         solver.writeComment("SOCKET CHANNEL CONSTRAINTS");
         while(pairIterator_i.hasNext()){
             SocketEvent rcv1 = pairIterator_i.next().getSecond();
+            if(rcv1 == null)
+                continue;
+
             //advance iterator to have two different pairs
             pairIterator_j = list.listIterator(pairIterator_i.nextIndex());
 
             while(pairIterator_j.hasNext()){
                 SocketEvent rcv2 = pairIterator_j.next().getSecond();
+                if(rcv2 == null)
+                    continue;
+
                 if(rcv1.conflictsWith(rcv2)){
                     //make a pair with SND events because
                     //two RCV events are racing if their respective SND events have the same order
@@ -542,7 +551,7 @@ public class MinhaCheckerParallel {
                     SocketEvent snd2 = msgEvents.get(rcv2.getMsgId()).getFirst();
                     MyPair<SocketEvent,SocketEvent> raceCandidate;
 
-                    if(snd1.getTraceOrder() < snd2.getTraceOrder())
+                    if(rcv1.getTraceOrder() < rcv2.getTraceOrder())
                         raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd2,rcv1);
                     else
                         raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd1,rcv2);
@@ -568,7 +577,7 @@ public class MinhaCheckerParallel {
         }
 
         //DEBUG: print candidate pairs
-        /*System.out.println("Message Race candidates: ");
+        System.out.println("Message Race candidates: ");
         for(MyPair<? extends Event,? extends Event> pair : msgRaceCandidates){
             System.out.println("\t"+pair);
         }//*/

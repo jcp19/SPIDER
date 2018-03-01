@@ -220,12 +220,16 @@ public class Z3SolverParallel implements Solver {
 
 
     public String postAssert(String constraint) {
-        Stats.numConstraints++;
+        //synchronized (this) {
+            Stats.numConstraints++;
+        //}
         return ("(assert "+constraint+")");
     }
 
     public String postNamedAssert(String constraint, String label) {
-        Stats.numConstraints++;
+        //synchronized (this) {
+            Stats.numConstraints++;
+        //}
         return ("(assert (! "+constraint+":named "+label+Stats.numConstraints+"))");
     }
 
@@ -278,7 +282,7 @@ public class Z3SolverParallel implements Solver {
         public boolean checkRace(String e1, String e2){
             try {
                 writers[id].write(push()+"\n");
-                String conflictConst = postNamedAssert(cEq(e1, e2), ("RACE"+Stats.numConstraints++));
+                String conflictConst = postNamedAssert(cEq(e1, e2), "RACE");
                 //System.out.println("CONSTRAINT: "+conflictConst);
                 writers[id].write(conflictConst+"\n");
                 writers[id].write(checkSat()+"\n");
