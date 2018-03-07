@@ -93,7 +93,10 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                removeRedundantEvents();
+                if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
+                        "true".equals(props.getProperty("redundancy-elimintaion"))) {
+                    removeRedundantEvents();
+                }
 
                 //generate constraint model
                 initSolver();
