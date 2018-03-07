@@ -18,7 +18,7 @@ public enum EventType {
     SND("SND"),
     RCV("RCV"),
 
-    //socket handling partial-order events
+    //message handlers
     HNDLBEG("HANDLERBEGIN"),
     HNDLEND("HANDLEREND"),
 

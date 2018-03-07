@@ -93,7 +93,7 @@ public class MinhaCheckerParallel {
                 loadEvents();
 
                 //remove redundant events
-                //removeRedundantEvents();
+                removeRedundantEvents();
 
                 //generate constraint model
                 initSolver();
@@ -517,7 +517,7 @@ public class MinhaCheckerParallel {
         //DEBUG: print candidate pairs
         System.out.println("Data Race candidates: ");
         for(MyPair<? extends Event,? extends Event> pair : dataRaceCandidates){
-            System.out.println(pair);
+            System.out.println("\t"+pair);
         }//*/
     }
 

@@ -268,7 +268,8 @@ public class Z3SolverParallel implements Solver {
                 //check data races for a portion of the list
                 for(int i = startPos; i < endPos; i++){
                     MyPair<? extends Event,? extends Event> candidate = candidates.get(i);
-                    boolean isConflict = checkRace(candidate.getFirst().toString(), candidate.getSecond().toString());
+                    boolean isMsgRace = (candidate.getFirst() instanceof SocketEvent);
+                    boolean isConflict = checkRace(candidate.getFirst().toString(), candidate.getSecond().toString(), isMsgRace);
                     if (isConflict) {
                         racesFound.put(candidate.hashCode(), candidate);
                     }
@@ -279,10 +280,14 @@ public class Z3SolverParallel implements Solver {
             }
         }
 
-        public boolean checkRace(String e1, String e2){
+        public boolean checkRace(String e1, String e2, boolean isMsgRace){
             try {
                 writers[id].write(push()+"\n");
-                String conflictConst = postNamedAssert(cEq(e1, e2), "RACE");
+                String conflictConst;
+                if(isMsgRace)
+                    conflictConst = postNamedAssert(cLt(e1, e2), "RACE");
+                else
+                    conflictConst = postNamedAssert(cEq(e1, e2), "RACE");
                 //System.out.println("CONSTRAINT: "+conflictConst);
                 writers[id].write(conflictConst+"\n");
                 writers[id].write(checkSat()+"\n");
