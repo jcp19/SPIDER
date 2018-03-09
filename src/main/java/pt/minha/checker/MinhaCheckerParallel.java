@@ -1,20 +1,17 @@
 package pt.minha.checker;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-import pt.minha.checker.events.*;
+import pt.haslab.taz.TraceProcessor;
+import pt.haslab.taz.events.*;
+import pt.haslab.taz.utils.Utils;
+import static pt.haslab.taz.events.EventType.*;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
-import static javax.swing.UIManager.get;
-import static pt.minha.checker.events.EventType.*;
 
 /**
  * Created by nunomachado on 30/03/17.
@@ -24,16 +21,10 @@ public class MinhaCheckerParallel {
     //properties
     public static Properties props;
 
+    //event trace processor
+    public static TraceProcessor trace;
+
     //data structures
-    public static Map<Long, MyPair<SocketEvent, SocketEvent>> msgEvents;        //Map: message id -> pair of events (snd,rcv)
-    public static Map<String, List<MyPair<SyncEvent, SyncEvent>>> lockEvents;   //Map: mutex -> list of pairs of locks/unlocks
-    public static Map<String, List<Event>> threadExecution;                     //Map: thread -> list of all events in that thread's execution
-    public static Map<String, List<RWEvent>> readSet;                           //Map: variable -> list of reads to that variable by all threads
-    public static Map<String, List<RWEvent>> writeSet;                          //Map: variable -> list of writes to that variable by all threads
-    public static Map<String, List<ThreadCreationEvent>> forkSet;               //Map: thread -> list of thread's fork events
-    public static Map<String, List<ThreadCreationEvent>> joinSet;               //Map: thread -> list of thread's join events
-    public static Map<String, List<SyncEvent>> waitSet;                         //Map: condition variable -> list of thread's wait events
-    public static Map<String, List<SyncEvent>> notifySet;                       //Map: condition variable -> list of thread's notify events
     public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
     public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
 
@@ -42,9 +33,9 @@ public class MinhaCheckerParallel {
 
     //Redundancy Elimination structures
     //Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
-    public static Map<String, Set<Long>> concurrencyContexts;
+    public static Map<String, Set<String>> concurrencyContexts;
     //Map: location -> concurreny history of that location (set of message ids and lock ids)
-    public static Map<String, Set<Long>> concurrencyHistories;
+    public static Map<String, Set<String>> concurrencyHistories;
     //Map: location,hashCode(TETAthread)-> stack of Threads
     public static Map<MyPair<String, Integer>, Stack<String>> stacks;
 
@@ -52,25 +43,17 @@ public class MinhaCheckerParallel {
     public static Solver solver;
 
     public static void printIteratorOrder() {
-        EventIterator events = new EventIterator(threadExecution.values());
+        EventIterator events = new EventIterator(trace.eventsPerThread.values());
         System.out.println(">>>>>>>>>>>");
         while (events.hasNext()) {
             Event e = events.next();
-            System.out.println(e.getId() + " :: " + e.toString());
+            System.out.println(e.getEventNumber() + " :: " + e.toString());
         }
         System.out.println(">>>>>>>>>>>");
     }
 
     public static void main(String args[]) {
-        msgEvents = new HashMap<Long, MyPair<SocketEvent, SocketEvent>>();
-        lockEvents = new HashMap<String, List<MyPair<SyncEvent,SyncEvent>>>();
-        threadExecution = new HashMap<String, List<Event>>();
-        readSet = new HashMap<String, List<RWEvent>>();
-        writeSet = new HashMap<String, List<RWEvent>>();
-        forkSet = new HashMap<String, List<ThreadCreationEvent>>();
-        joinSet = new HashMap<String, List<ThreadCreationEvent>>();
-        waitSet = new HashMap<String, List<SyncEvent>>();
-        notifySet = new HashMap<String, List<SyncEvent>>();
+
         dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
 
@@ -78,8 +61,8 @@ public class MinhaCheckerParallel {
         redundantEvents = new HashSet<Integer>();
 
         //Redundancy-check related initializations
-        concurrencyContexts = new HashMap<String, Set<Long>>();
-        concurrencyHistories = new HashMap<String, Set<Long>>();
+        concurrencyContexts = new HashMap<String, Set<String>>();
+        concurrencyHistories = new HashMap<String, Set<String>>();
         stacks = new HashMap<MyPair<String, Integer>, Stack<String>>();
 
         try {
@@ -90,7 +73,9 @@ public class MinhaCheckerParallel {
                 props.load(is);
 
                 //populate data structures
-                loadEvents();
+                String traceFile = props.getProperty("event-file");
+                trace = TraceProcessor.INSTANCE;
+                trace.loadEventTrace(traceFile);
 
                 //remove redundant events
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
@@ -123,85 +108,18 @@ public class MinhaCheckerParallel {
         }
     }
 
-    static void printRWSet() {
-        System.out.println("*** READ SET");
-        for(List<RWEvent> eventList : readSet.values()) {
-            for(RWEvent rwe : eventList) {
-                System.out.println("*** " + rwe.toString());
-            }
-        }
-        System.out.println("*** WRITE SET");
-        for(List<RWEvent> eventList : writeSet.values()) {
-            for(RWEvent rwe : eventList) {
-                System.out.println("*** " + rwe.toString());
-            }
-        }
-    }
-
-    static void printLocks() {
-        System.out.println("*** LOCK SET");
-        for(List<MyPair<SyncEvent, SyncEvent>> eventList : lockEvents.values()) {
-            for(MyPair<SyncEvent, SyncEvent> e : eventList) {
-                String fst = e.getFirst() != null? e.getFirst().toString() : null;
-                String snd = e.getSecond() != null? e.getSecond().toString() : null;
-                System.out.println("*** " + fst  +" -> " + snd);
-            }
-        }
-    }
-
-    /**
-     * Inserts a value in a list associated with a key and creates the
-     * list if it doesnt exist already
-     * Returns true iff the value didnt exist before in the list
-     */
-    public static <K,V> boolean insertInMapToLists(Map<K,List<V>> map, K key, V value) {
-        List<V> values_list = map.get(key);
-
-        if(values_list == null) {
-            values_list = new ArrayList<V>();
-            map.put(key, values_list);
-        }
-        boolean contains = values_list.contains(value);
-        values_list.add(value);
-        return !contains;
-    }
-
-    public static <K,V> boolean insertInMapToSets(Map<K,Set<V>> map, K key, V value) {
-        Set<V> values_list = map.get(key);
-
-        if(values_list == null) {
-            values_list = new HashSet<V>();
-            map.put(key, values_list);
-        }
-        boolean contains = values_list.contains(value);
-        values_list.add(value);
-        return !contains;
-    }
-
-    public static <K,V> void insertAllInMapToSet(Map<K,Set<V>> map, K key, Collection<V> values) {
-        if(values == null){
-            return;
-        }
-        Set<V> valuesSet = map.get(key);
-
-        if(valuesSet == null) {
-            valuesSet = new HashSet<V>();
-            map.put(key, valuesSet);
-        }
-        valuesSet.addAll(values);
-    }
 
     public static void printDebugInfo() {
         System.out.println("*************************************************");
 
         System.out.println("Concurrency contexts:");
-        for(Map.Entry<String, Set<Long>> cc : concurrencyContexts.entrySet()) {
-            System.out.println(cc.getKey() + " : " + cc.getValue().toString());
+        for(Map.Entry<String, Set<String>> cc : concurrencyContexts.entrySet()) {
+            System.out.println(cc.getKey() + " : " + cc.getValue());
         }
 
         System.out.println("Concurrency Histories:");
-        for(Map.Entry<String, Set<Long>> cc : concurrencyHistories.entrySet()) {
-            System.out.println(cc.getKey() + " : " + cc.getValue().toString());
+        for(Map.Entry<String, Set<String>> cc : concurrencyHistories.entrySet()) {
+            System.out.println(cc.getKey() + " : " + cc.getValue());
         }
 
         System.out.println("Stacks:");
@@ -219,7 +137,7 @@ public class MinhaCheckerParallel {
         // - the function getStack in ReX depends on the current state of teta-loc
 
         long count = 0;
-        EventIterator events = new EventIterator(threadExecution.values());
+        EventIterator events = new EventIterator(trace.eventsPerThread.values());
         while(events.hasNext()) {
             Event e = events.next();
             String thread = e.getThread();
@@ -232,7 +150,7 @@ public class MinhaCheckerParallel {
                 case UNLOCK:
                     SyncEvent le = (SyncEvent) e;
                     //temporary use of hashCode
-                    insertInMapToSets(concurrencyContexts, thread, (long) le.getVariable().hashCode());
+                    Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(le.getVariable().hashCode()));
                     //the concurrency context changed
                     break;
                 //MEM Access
@@ -243,28 +161,28 @@ public class MinhaCheckerParallel {
                         //if an event is redundant, remove from the trace
                         events.remove();
                         //DEBUG info
-                        redundantEvents.add(e.getId());
+                        redundantEvents.add(e.getEventNumber());
                         //remove from readSet and writeSet
-                        (type == READ? readSet : writeSet).get(rwe.getVariable()).remove(rwe);
+                        (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     }
                     break;
 
                 case SND:
                     SocketEvent se = (SocketEvent) e;
-                    insertInMapToSets(concurrencyContexts, thread, se.getMsgId());
+                    Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
                     //the concurrency context changed
                     break;
                 case CREATE:
                     // handles CREATE events the same way it handles SND
                     ThreadCreationEvent tse = (ThreadCreationEvent) e;
-                    insertInMapToSets(concurrencyContexts, thread, (long) tse.hashCode());
+                    Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(tse.hashCode()));
                     break;
                 default:
                     // advance e
                     break;
             }
-            System.out.println("-- Event " + e.getId() + " : " + e.toString());
+            System.out.println("-- Event " + e.getEventNumber() + " : " + e.toString());
             printDebugInfo();
 
         }
@@ -273,8 +191,8 @@ public class MinhaCheckerParallel {
 
     private static boolean checkRedundancy(RWEvent event, String thread) {
         String loc = event.getLoc();
-        Set<Long> concurrencyHistory = concurrencyHistories.get(loc);
-        Set<Long> concurrencyContext = concurrencyContexts.get(thread);
+        Set<String> concurrencyHistory = concurrencyHistories.get(loc);
+        Set<String> concurrencyContext = concurrencyContexts.get(thread);
         MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLoc(), concurrencyContext==null?0:concurrencyContext.hashCode());
         Stack<String> stack = stacks.get(key);
 
@@ -283,7 +201,7 @@ public class MinhaCheckerParallel {
             //cases, we need a new stack
             stack = new Stack<String>();
             //adds concurrency context of thread to concurrency history
-            insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
+            Utils.insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
 
             //calculates the new key for the current state of the concurrency history
             // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
@@ -303,187 +221,7 @@ public class MinhaCheckerParallel {
         return false;
     }
 
-    public static void loadEvents() throws IOException, JSONException {
-        String events = props.getProperty("event-file");
-        BufferedReader br = new BufferedReader(new FileReader(events));
-        String line = br.readLine();
-        while (line != null) {
-            JSONObject object = new JSONObject(line);
-            parseJSONEvent(object);
-            line = br.readLine();
 
-        }
-        //printDataStructures();
-    }
-
-
-    private static void parseJSONEvent(JSONObject event) throws JSONException {
-        EventType type = EventType.getEventType(event.getString("type"));
-        String thread = event.getString("thread");
-
-        if(type == null)
-            throw new JSONException("Unknown event type: " + event.getString("type"));
-
-        Stats.numEventsTrace++;
-
-        //initialize thread map data structures
-        if (!threadExecution.containsKey(thread)) {
-            threadExecution.put(thread, new LinkedList<Event>());
-            forkSet.put(thread, new LinkedList<ThreadCreationEvent>());
-            joinSet.put(thread, new LinkedList<ThreadCreationEvent>());
-        }
-
-        //populate data structures
-        switch (type) {
-            case RCV:
-            case SND:
-                long msgId = event.getLong("message");
-                String dst = event.getString("dst");
-                String src = event.getString("src");
-                String socketId = event.getString("socket");
-                long timestamp = event.getLong("timestamp");
-                String channel = event.getString("channel");
-                SocketEvent se = new SocketEvent(thread, type, msgId, src, dst, socketId, timestamp, channel, threadExecution.get(thread).size());
-                se.setSrcPort(event.getInt("src_port"));
-                se.setDstPort(event.getInt("dst_port"));
-
-                //the send event must always appear before the receive one
-                //so it suffices to create the entry only in the former case
-                if (type == EventType.SND) {
-                    MyPair<SocketEvent, SocketEvent> pair = new MyPair<SocketEvent, SocketEvent>(se, null);
-                    msgEvents.put(msgId, pair);
-                } else {
-                    msgEvents.get(msgId).setSecond(se);
-                }
-                threadExecution.get(thread).add(se);
-                break;
-            case READ:
-            case WRITE:
-                String loc = event.getString("loc");
-                String var = event.getString("variable");
-                long counter = event.getLong("counter");
-                RWEvent rwe = new RWEvent(thread, type, loc, var, counter);
-                threadExecution.get(thread).add(rwe);
-                if(type == READ) {
-                    if(!readSet.containsKey(var)){
-                        readSet.put(var,new LinkedList<RWEvent>());
-                    }
-                    readSet.get(var).add(rwe);
-                }
-                else{
-                    if(!writeSet.containsKey(var)){
-                        writeSet.put(var,new LinkedList<RWEvent>());
-                    }
-                    writeSet.get(var).add(rwe);
-                }
-                break;
-            case START:
-            case END:
-                Event te = new Event(thread, type);
-                threadExecution.get(thread).add(te);
-                break;
-            case HNDLBEG:
-            case HNDLEND:
-                String method = event.getString("method");
-                counter = event.getLong("counter");
-                HandlerEvent he = new HandlerEvent(thread, type, method, counter);
-                threadExecution.get(thread).add(he);
-                break;
-            case CREATE:
-            case JOIN:
-                String child = event.getString("child");
-                Event tse = new ThreadCreationEvent(thread, type, child);
-                threadExecution.get(thread).add(tse);
-                if (type == EventType.CREATE)
-                    forkSet.get(thread).add((ThreadCreationEvent) tse);
-                else
-                    joinSet.get(thread).add((ThreadCreationEvent) tse);
-                break;
-            case LOCK:
-            case UNLOCK:
-            case NOTIFY:
-            case NOTIFYALL:
-            case WAIT:
-                String location = event.getString("loc");
-                String variable = event.getString("variable");
-                long count = event.getLong("counter");
-                SyncEvent syncEvent = new SyncEvent(thread, type, location, variable, count);
-                threadExecution.get(thread).add(syncEvent);
-                if (type == LOCK) {
-                    List<MyPair<SyncEvent, SyncEvent>> pairList = lockEvents.get(variable);
-                    MyPair<SyncEvent,SyncEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
-                    if(pair == null || pair.getSecond() != null) {
-                        // Only adds the lock event if the previous lock event has a corresponding unlock
-                        // in order to handle Reentrant Locks
-                        insertInMapToLists(lockEvents, variable, new MyPair<SyncEvent, SyncEvent>(syncEvent, null));
-                    }
-                } else if (type == UNLOCK) {
-                    // second component is the unlock event associated with the lock
-                    List<MyPair<SyncEvent, SyncEvent>> pairList = lockEvents.get(variable);
-                    MyPair<SyncEvent,SyncEvent> pair = pairList!=null? pairList.get(pairList.size() - 1) : null;
-                    if(pair == null) {
-                        insertInMapToLists(lockEvents, variable, new MyPair<SyncEvent, SyncEvent>(null, syncEvent));
-                    } else {
-                        pair.setSecond(syncEvent);
-                    }
-                } else if (type == WAIT) {
-                    if(!waitSet.containsKey(variable)){
-                        waitSet.put(variable, new LinkedList<SyncEvent>());
-                    }
-                    waitSet.get(variable).add(syncEvent);
-                } else if (type == NOTIFY || type == NOTIFYALL) {
-                    if(!notifySet.containsKey(variable)){
-                        notifySet.put(variable, new LinkedList<SyncEvent>());
-                    }
-                    notifySet.get(variable).add(syncEvent);
-                }
-                break;
-            default:
-                throw new JSONException("Unknown event type: " + type);
-        }
-    }
-
-    private static void printDataStructures() {
-        System.out.println("--- THREAD EVENTS ---");
-        for (String t : threadExecution.keySet()) {
-            System.out.println("#" + t);
-            for (Event e : threadExecution.get(t)) {
-                System.out.println(" " + e.toString());
-            }
-        }
-
-        System.out.println("\n--- SOCKET MESSAGE EVENTS ---");
-        for (MyPair<SocketEvent, SocketEvent> se : msgEvents.values()) {
-            System.out.println(se.getFirst() + " -> " + se.getSecond());
-        }
-
-        System.out.println("\n--- READ EVENTS ---");
-        for (List<RWEvent> rset : readSet.values()) {
-            for (RWEvent r : rset) {
-                System.out.println(r);
-            }
-        }
-
-        System.out.println("\n--- WRITE EVENTS ---");
-        for (List<RWEvent> wset : writeSet.values()) {
-            for (RWEvent w : wset) {
-                System.out.println(w);
-            }
-        }
-
-        System.out.println("\n--- FORK EVENTS ---");
-        for (List<ThreadCreationEvent> fset : forkSet.values()) {
-            for (Event f : fset) {
-                System.out.println(f);
-            }
-        }
-        System.out.println("\n--- JOIN EVENTS ---");
-        for (List<ThreadCreationEvent> jset : joinSet.values()) {
-            for (Event j : jset) {
-                System.out.println(j);
-            }
-        }
-    }
 
 
     public static void genDataRaceCandidates() {
@@ -492,11 +230,11 @@ public class MinhaCheckerParallel {
         // a) at least of one of the operations is a write
         // b) both operations access the same variable
         // c) operations are from different threads, but from the same node
-        for(String var : writeSet.keySet()){
-            for(RWEvent w1 : writeSet.get(var)){
+        for(String var : trace.writeEvents.keySet()){
+            for(RWEvent w1 : trace.writeEvents.get(var)){
 
                 //pair with all other writes
-                for (RWEvent w2 : writeSet.get(var)) {
+                for (RWEvent w2 : trace.writeEvents.get(var)) {
                     if (w1.conflictsWith(w2)) {
                         MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, w2);
                         if (!dataRaceCandidates.contains(tmpPair)) {
@@ -506,8 +244,8 @@ public class MinhaCheckerParallel {
                 }
 
                 //pair with all other reads
-                if(readSet.containsKey(var)) {
-                    for (RWEvent r2 : readSet.get(var)) {
+                if(trace.readEvents.containsKey(var)) {
+                    for (RWEvent r2 : trace.readEvents.get(var)) {
                         MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, r2);
                         if (w1.conflictsWith(r2) && !dataRaceCandidates.contains(tmpPair)) {
                             dataRaceCandidates.add(tmpPair);
@@ -529,7 +267,7 @@ public class MinhaCheckerParallel {
         // a pair of RCV operations is a candidate if:
         // a) both occur at the same node
         // b) are either from different threads of from different message handlers in the same thread
-        List<MyPair<SocketEvent, SocketEvent>> list = new ArrayList<MyPair<SocketEvent, SocketEvent>>(msgEvents.values());
+        List<MyPair<SocketEvent, SocketEvent>> list = new ArrayList<MyPair<SocketEvent, SocketEvent>>(trace.msgEvents.values());
         ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_i = list.listIterator(0);
         ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_j;
 
@@ -550,11 +288,11 @@ public class MinhaCheckerParallel {
                 if(rcv1.conflictsWith(rcv2)){
                     //make a pair with SND events because
                     //two RCV events are racing if their respective SND events have the same order
-                    SocketEvent snd1 = msgEvents.get(rcv1.getMsgId()).getFirst();
-                    SocketEvent snd2 = msgEvents.get(rcv2.getMsgId()).getFirst();
+                    SocketEvent snd1 = trace.msgEvents.get(rcv1.getMessageId()).getFirst();
+                    SocketEvent snd2 = trace.msgEvents.get(rcv2.getMessageId()).getFirst();
                     MyPair<SocketEvent,SocketEvent> raceCandidate;
 
-                    if(rcv1.getTraceOrder() < rcv2.getTraceOrder())
+                    if(rcv1.getEventNumber() < rcv2.getEventNumber())
                         raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd2,rcv1);
                     else
                         raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd1,rcv2);
@@ -562,14 +300,14 @@ public class MinhaCheckerParallel {
 
                     //if socket channel is TCP and SNDs are from the same thread,
                     // then add constraint stating that RCV1 happens before SND2
-                    if(snd1.getChannel() == SocketEvent.ChannelType.TCP
-                            && snd2.getChannel() == SocketEvent.ChannelType.TCP
+                    if(snd1.getSocketType() == SocketEvent.SocketType.TCP
+                            && snd2.getSocketType() == SocketEvent.SocketType.TCP
                             && snd1.getThread().equals(snd2.getThread())){
 
                         String cnst;
                         //check trace order of SND, as the iterator does not traverse the events
                         //according to the program order
-                        if(snd1.getTraceOrder() < snd2.getTraceOrder())
+                        if(snd1.getEventNumber() < snd2.getEventNumber())
                             cnst = solver.cLt(rcv1.toString(), snd2.toString());
                         else
                             cnst = solver.cLt(rcv2.toString(), snd1.toString());
@@ -623,8 +361,8 @@ public class MinhaCheckerParallel {
             //translate SND events to their respective RCV events
             SocketEvent snd1 = (SocketEvent) conf.getFirst();
             SocketEvent snd2 = (SocketEvent) conf.getSecond();
-            SocketEvent rcv1 = msgEvents.get(snd1.getMsgId()).getSecond();
-            SocketEvent rcv2 = msgEvents.get(snd2.getMsgId()).getSecond();
+            SocketEvent rcv1 = trace.msgEvents.get(snd1.getMessageId()).getSecond();
+            SocketEvent rcv2 = trace.msgEvents.get(snd2.getMessageId()).getSecond();
             MyPair<SocketEvent, SocketEvent> rcv_conf = new MyPair<SocketEvent, SocketEvent>(rcv1, rcv2);
             System.out.println("-- "+rcv_conf);
         }
@@ -640,14 +378,14 @@ public class MinhaCheckerParallel {
         System.out.println("[MinhaChecker] Generate program order constraints");
         solver.writeComment("PROGRAM ORDER CONSTRAINTS");
         int max = 0;
-        for (List<Event> l : threadExecution.values()) {
+        for (List<Event> l : trace.eventsPerThread.values()) {
             max += l.size();
         }
         solver.writeConst(solver.declareIntVar("MAX"));
         solver.writeConst(solver.postAssert(solver.cEq("MAX", String.valueOf(max))));
 
         //generate program order variables and constraints
-        for (List<Event> events : threadExecution.values()) {
+        for (List<Event> events : trace.eventsPerThread.values()) {
             boolean isMsgHandler = false;
             if (!events.isEmpty()) {
                 //list with blocks of events encompassed by HANDLERBEGIN and HANDLEREND
@@ -718,7 +456,7 @@ public class MinhaCheckerParallel {
     public static void genCommunicationConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate communication constraints");
         solver.writeComment("COMMUNICATION CONSTRAINTS");
-        for (MyPair<SocketEvent, SocketEvent> pair : msgEvents.values()) {
+        for (MyPair<SocketEvent, SocketEvent> pair : trace.msgEvents.values()) {
             if(pair.getFirst()!= null && pair.getSecond()!=null) {
                 String cnst = solver.cLt(pair.getFirst().toString(), pair.getSecond().toString());
                 solver.writeConst(solver.postNamedAssert(cnst,"COM"));
@@ -729,9 +467,9 @@ public class MinhaCheckerParallel {
     public static void genForkStartConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate fork-start constraints");
         solver.writeComment("FORK-START CONSTRAINTS");
-        for(List<ThreadCreationEvent> l : forkSet.values()){
+        for(List<ThreadCreationEvent> l : trace.forkEvents.values()){
             for(ThreadCreationEvent e : l){
-                String cnst = solver.cLt(e.toString(), "START_"+e.getChild());
+                String cnst = solver.cLt(e.toString(), "START_"+e.getChildThread());
                 solver.writeConst(solver.postNamedAssert(cnst,"FS"));
             }
         }
@@ -740,9 +478,9 @@ public class MinhaCheckerParallel {
     public static void genJoinExitConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate join-end constraints");
         solver.writeComment("JOIN-END CONSTRAINTS");
-        for(List<ThreadCreationEvent> l : joinSet.values()){
+        for(List<ThreadCreationEvent> l : trace.joinEvents.values()){
             for(ThreadCreationEvent e : l){
-                String cnst = solver.cLt("END_"+e.getChild(), e.toString());
+                String cnst = solver.cLt("END_"+e.getChildThread(), e.toString());
                 solver.writeConst(solver.postNamedAssert(cnst,"JE"));
             }
         }
@@ -752,16 +490,16 @@ public class MinhaCheckerParallel {
     public static void genLockingConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate locking constraints");
         solver.writeComment("LOCKING CONSTRAINTS");
-        for(String var : lockEvents.keySet()){
+        for(String var : trace.lockEvents.keySet()){
             // for two lock/unlock pairs on the same locking object,
             // one pair must be executed either before or after the other
-            ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_i = lockEvents.get(var).listIterator(0);
+            ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_i = trace.lockEvents.get(var).listIterator(0);
             ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_j;
 
             while(pairIterator_i.hasNext()){
                 MyPair<SyncEvent, SyncEvent> pair_i = pairIterator_i.next();
                 //advance iterator to have two different pairs
-                pairIterator_j =  lockEvents.get(var).listIterator(pairIterator_i.nextIndex());
+                pairIterator_j =  trace.lockEvents.get(var).listIterator(pairIterator_i.nextIndex());
 
                 while(pairIterator_j.hasNext()) {
                     MyPair<SyncEvent, SyncEvent> pair_j = pairIterator_j.next();
@@ -789,13 +527,13 @@ public class MinhaCheckerParallel {
 
         //for a given condition, each notify can be mapped to any wait
         //but a wait can only have a single notify
-        for(String condition : waitSet.keySet()){
-            for(SyncEvent wait : waitSet.get(condition)) {
+        for(String condition : trace.waitEvents.keySet()){
+            for(SyncEvent wait : trace.waitEvents.get(condition)) {
                 StringBuilder globalOr = new StringBuilder();
 
-                for(SyncEvent notify : notifySet.get(condition)){
+                for(SyncEvent notify : trace.notifyEvents.get(condition)){
                     //binary var used to indicate whether the signal operation is mapped to a wait operation or not
-                    String binVar = "B_"+condition+"-W_" + wait.getThread()+"_"+wait.getCounter()+"-N_"+notify.getThread()+"_"+notify.getCounter();
+                    String binVar = "B_"+condition+"-W_" + wait.getThread()+"_"+wait.getEventNumber()+"-N_"+notify.getThread()+"_"+notify.getEventNumber();
 
                     if(!binaryVars.containsKey(notify)){
                         binaryVars.put(notify, new ArrayList<String>());

@@ -1,9 +1,6 @@
 package pt.minha.checker.solver;
 
-import pt.minha.checker.events.Event;
-import pt.minha.checker.events.MyPair;
-import pt.minha.checker.events.RWEvent;
-import pt.minha.checker.events.SocketEvent;
+import pt.haslab.taz.events.*;
 import pt.minha.checker.stats.Stats;
 
 import java.io.*;

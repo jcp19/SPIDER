@@ -10,11 +10,11 @@
 
     <dependencies>
 
-    <dependency>
-        <groupId>org.slf4j</groupId>
-        <artifactId>slf4j-api</artifactId>
-        <version>1.7.10</version>
-    </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>1.7.10</version>
+        </dependency>
 
         <dependency>
             <groupId>org.json</groupId>
@@ -22,6 +22,11 @@
             <version>20090211</version>
         </dependency>
 
+        <dependency>
+            <groupId>pt.haslab</groupId>
+            <artifactId>falcon-taz</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <build>
