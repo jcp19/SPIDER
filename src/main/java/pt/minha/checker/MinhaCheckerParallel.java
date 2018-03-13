@@ -80,7 +80,7 @@ public class MinhaCheckerParallel {
 
                 //remove redundant events
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
-                        "true".equals(props.getProperty("redundancy-elimintaion"))) {
+                        "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
                 }
 
@@ -148,10 +148,17 @@ public class MinhaCheckerParallel {
                 throw new RuntimeException("EventType not known");
 
             switch (type) {
-                case UNLOCK:
+                case LOCK:
                     SyncEvent le = (SyncEvent) e;
                     //temporary use of hashCode
                     Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(le.getVariable().hashCode()));
+                    //the concurrency context changed
+                    break;
+                case UNLOCK:
+                    SyncEvent ue = (SyncEvent) e;
+                    //temporary use of hashCode
+                    concurrencyContexts.get(thread).remove(ue.getVariable().hashCode());
+                    Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(ue.getVariable().hashCode()));
                     //the concurrency context changed
                     break;
                 //MEM Access
