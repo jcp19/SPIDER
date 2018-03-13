@@ -76,6 +76,7 @@ public class MinhaCheckerParallel {
                 String traceFile = props.getProperty("event-file");
                 trace = TraceProcessor.INSTANCE;
                 trace.loadEventTrace(traceFile);
+                Stats.numEventsTrace = trace.getNumberOfEvents();
 
                 //remove redundant events
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
