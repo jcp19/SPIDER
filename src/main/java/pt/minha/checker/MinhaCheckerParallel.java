@@ -10,6 +10,7 @@ import pt.minha.checker.stats.Stats;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Socket;
 import java.util.*;
 
 
@@ -35,9 +36,12 @@ public class MinhaCheckerParallel {
     //Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
     public static Map<String, Set<String>> concurrencyContexts;
     //Map: location -> concurreny history of that location (set of message ids and lock ids)
-    public static Map<String, Set<String>> concurrencyHistories;
+    //public static Map<String, Set<String>> concurrencyHistories;
     //Map: location,hashCode(TETAthread)-> stack of Threads
     public static Map<MyPair<String, Integer>, Stack<String>> stacks;
+
+    //Map: str(location pair),hashCode(TETAthread)-> stack of
+    public static Map<MyPair<String, Integer>, Stack<MyPair<SocketEvent, SocketEvent>>> msgStacks;
 
     //solver stuff
     public static Solver solver;
@@ -56,13 +60,14 @@ public class MinhaCheckerParallel {
 
         dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
+        msgStacks = new HashMap<MyPair<String, Integer>, Stack<MyPair<SocketEvent, SocketEvent>>>();
 
         //DEBUG
         redundantEvents = new HashSet<Integer>();
 
         //Redundancy-check related initializations
         concurrencyContexts = new HashMap<String, Set<String>>();
-        concurrencyHistories = new HashMap<String, Set<String>>();
+        //concurrencyHistories = new HashMap<String, Set<String>>();
         stacks = new HashMap<MyPair<String, Integer>, Stack<String>>();
 
         try {
@@ -82,6 +87,7 @@ public class MinhaCheckerParallel {
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
                         "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
+                    //removeRedundantMessageEvents();
                 }
 
                 //generate constraint model
@@ -108,7 +114,22 @@ public class MinhaCheckerParallel {
             e.printStackTrace();
         }
     }
+/*
+    private static void removeRedundantMessageEvents() {
 
+        //build snd tree for each thread
+        HashMap<String, Map<MyPair<String, String>, Stack>> msgStacks; // Map DestThreadID -> Map (SND_location, RCV_location) Msg events tree
+        for(RCV i event) {
+            if(not redundant (SND i, RCVi))
+                insert(SND i, RCV i)
+            else
+                remove(SND i, RCV i)
+        }
+
+        //remove redundant 4tuples
+
+    }
+*/
 
     public static void printDebugInfo() {
         System.out.println("*************************************************");
@@ -118,10 +139,10 @@ public class MinhaCheckerParallel {
             System.out.println(cc.getKey() + " : " + cc.getValue());
         }
 
-        System.out.println("Concurrency Histories:");
-        for(Map.Entry<String, Set<String>> cc : concurrencyHistories.entrySet()) {
-            System.out.println(cc.getKey() + " : " + cc.getValue());
-        }
+        //System.out.println("Concurrency Histories:");
+        //for(Map.Entry<String, Set<String>> cc : concurrencyHistories.entrySet()) {
+            //System.out.println(cc.getKey() + " : " + cc.getValue());
+        //}
 
         System.out.println("Stacks:");
         System.out.println(stacks.entrySet().toString());
@@ -136,7 +157,7 @@ public class MinhaCheckerParallel {
         // Assumptions:
         // - The order of the events iterator corresponds to the chronological order of the events
         // - the function getStack in ReX depends on the current state of teta-loc
-
+        Set<Event> toRemove = new HashSet<Event>();
         long count = 0;
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
         while(events.hasNext()) {
@@ -158,7 +179,7 @@ public class MinhaCheckerParallel {
                     SyncEvent ue = (SyncEvent) e;
                     //temporary use of hashCode
                     concurrencyContexts.get(thread).remove(ue.getVariable().hashCode());
-                    Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(ue.getVariable().hashCode()));
+                    //Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(ue.getVariable().hashCode()));
                     //the concurrency context changed
                     break;
                 //MEM Access
@@ -175,7 +196,33 @@ public class MinhaCheckerParallel {
                         count++;
                     }
                     break;
+                case RCV:
+                    // remove message redundancy
+                    SocketEvent rcve = (SocketEvent) e;
+                    int concurrencyContextHash;
+                    MyPair<SocketEvent, SocketEvent> snd_rcv = trace.msgEvents.get(rcve.getMessageId());
+                    Set<String> concurrencyContext = concurrencyContexts.get(thread);
 
+                    //TODO falta adicionar thread de destino
+                    String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLoc(), rcve.getThread() + snd_rcv.getSecond().getLoc()).toString();
+                    concurrencyContextHash = concurrencyContext==null?0:concurrencyContext.hashCode();
+                    MyPair<String, Integer> key = new MyPair<String, Integer>(event_pair_str, concurrencyContextHash);
+
+                    Stack<MyPair<SocketEvent,SocketEvent>> stack = msgStacks.get(key);
+                    if(stack == null) {
+                        stack = new Stack<MyPair<SocketEvent,SocketEvent>>();
+                        msgStacks.put(key,stack);
+                    }
+                    if(stack.size() >= 2) {
+                        //TODO eliminar SND e RCV
+                        toRemove.add(snd_rcv.getFirst());
+                        toRemove.add(snd_rcv.getSecond());
+                        trace.msgEvents.remove(rcve.getMessageId());
+                    } else {
+                        stack.push(snd_rcv);
+                    }
+
+                    break;
                 case SND:
                     SocketEvent se = (SocketEvent) e;
                     Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
@@ -191,25 +238,31 @@ public class MinhaCheckerParallel {
                     break;
             }
             System.out.println("-- Event " + e.getEventNumber() + " : " + e.toString());
-            printDebugInfo();
+            //printDebugInfo();
 
         }
+        Stats.redundantSocketEvents = toRemove.size();
         Stats.redundantEvents = count;
+        removeSocketEvents(toRemove);
+    }
+
+    private static void removeSocketEvents(Set<Event> toRemove) {
+        for (List<Event> t : trace.eventsPerThread.values()) {
+            t.removeAll(toRemove);
+        }
     }
 
     private static boolean checkRedundancy(RWEvent event, String thread) {
         String loc = event.getLoc();
-        Set<String> concurrencyHistory = concurrencyHistories.get(loc);
+        //Set<String> concurrencyHistory = concurrencyHistories.get(loc);
         Set<String> concurrencyContext = concurrencyContexts.get(thread);
         MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLoc(), concurrencyContext==null?0:concurrencyContext.hashCode());
         Stack<String> stack = stacks.get(key);
 
         if(stack == null) {
-            //the stack is empty or the concurrency context of the thread was changed: in both
-            //cases, we need a new stack
             stack = new Stack<String>();
             //adds concurrency context of thread to concurrency history
-            Utils.insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
+            //Utils.insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
 
             //calculates the new key for the current state of the concurrency history
             // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
@@ -228,9 +281,6 @@ public class MinhaCheckerParallel {
         }
         return false;
     }
-
-
-
 
     public static void genDataRaceCandidates() {
         // generate all pairs of data race candidates
@@ -347,8 +397,18 @@ public class MinhaCheckerParallel {
         Stats.totalDataRacePairs = dataRaceCandidates.size();
         System.out.println("#Data Race Candidates: "+Stats.totalDataRaceCandidates +" | #Actual Data Races: "+Stats.totalDataRacePairs);
         for(MyPair<? extends Event,? extends Event> conf : dataRaceCandidates){
-            System.out.println("-- "+conf);
+            System.out.println("-- "+ orderedToString(conf));
         }
+    }
+
+    static String orderedToString(MyPair<? extends Event,? extends Event> pair) {
+        String fst = pair.getFirst() != null ? pair.getFirst().toString() : " ";
+        String snd = pair.getSecond() != null ? pair.getSecond().toString() : " ";
+        if(fst.compareTo(snd) < 0) {
+            return "(" + snd + ", " + fst + ")";
+        }
+        return "(" + fst + ", " + snd + ")";
+
     }
 
     public static void checkMsgRaces() throws IOException {
@@ -372,7 +432,7 @@ public class MinhaCheckerParallel {
             SocketEvent rcv1 = trace.msgEvents.get(snd1.getMessageId()).getSecond();
             SocketEvent rcv2 = trace.msgEvents.get(snd2.getMessageId()).getSecond();
             MyPair<SocketEvent, SocketEvent> rcv_conf = new MyPair<SocketEvent, SocketEvent>(rcv1, rcv2);
-            System.out.println("-- "+rcv_conf);
+            System.out.println("~~ "+rcv_conf);
         }
     }
 
