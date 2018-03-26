@@ -10,7 +10,6 @@ import pt.minha.checker.stats.Stats;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.Socket;
 import java.util.*;
 
 
@@ -141,7 +140,7 @@ public class MinhaCheckerParallel {
 
         //System.out.println("Concurrency Histories:");
         //for(Map.Entry<String, Set<String>> cc : concurrencyHistories.entrySet()) {
-            //System.out.println(cc.getKey() + " : " + cc.getValue());
+        //System.out.println(cc.getKey() + " : " + cc.getValue());
         //}
 
         System.out.println("Stacks:");
@@ -204,7 +203,7 @@ public class MinhaCheckerParallel {
                     Set<String> concurrencyContext = concurrencyContexts.get(thread);
 
                     //TODO falta adicionar thread de destino
-                    String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLoc(), rcve.getThread() + snd_rcv.getSecond().getLoc()).toString();
+                    String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLineOfCode(), rcve.getThread() + snd_rcv.getSecond().getLineOfCode()).toString();
                     concurrencyContextHash = concurrencyContext==null?0:concurrencyContext.hashCode();
                     MyPair<String, Integer> key = new MyPair<String, Integer>(event_pair_str, concurrencyContextHash);
 
@@ -253,10 +252,10 @@ public class MinhaCheckerParallel {
     }
 
     private static boolean checkRedundancy(RWEvent event, String thread) {
-        String loc = event.getLoc();
+        String loc = event.getLineOfCode();
         //Set<String> concurrencyHistory = concurrencyHistories.get(loc);
         Set<String> concurrencyContext = concurrencyContexts.get(thread);
-        MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLoc(), concurrencyContext==null?0:concurrencyContext.hashCode());
+        MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLineOfCode(), concurrencyContext==null?0:concurrencyContext.hashCode());
         Stack<String> stack = stacks.get(key);
 
         if(stack == null) {
@@ -266,7 +265,7 @@ public class MinhaCheckerParallel {
 
             //calculates the new key for the current state of the concurrency history
             // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
-            MyPair<String,Integer> newKey = new MyPair<String, Integer>(event.getLoc(),concurrencyContext==null?0:concurrencyContext.hashCode() );
+            MyPair<String,Integer> newKey = new MyPair<String, Integer>(event.getLineOfCode(),concurrencyContext==null?0:concurrencyContext.hashCode() );
             stacks.put(newKey, stack);
 
             stack.push(thread);
@@ -316,7 +315,7 @@ public class MinhaCheckerParallel {
         //DEBUG: print candidate pairs
         System.out.println("Data Race candidates: ");
         for(MyPair<? extends Event,? extends Event> pair : dataRaceCandidates){
-            System.out.println("\t"+pair);
+            System.out.println("\t"+orderedToString(pair));
         }//*/
     }
 
@@ -378,7 +377,7 @@ public class MinhaCheckerParallel {
         //DEBUG: print candidate pairs
         System.out.println("Message Race candidates: ");
         for(MyPair<? extends Event,? extends Event> pair : msgRaceCandidates){
-            System.out.println("\t"+pair);
+            System.out.println("\t"+orderedToString(pair));
         }//*/
     }
 
@@ -390,15 +389,15 @@ public class MinhaCheckerParallel {
 
         solver.writeComment("DATA RACE CONSTRAINTS");
         Stats.totalDataRaceCandidates = dataRaceCandidates.size();
-        System.out.println("[MinhaChecker] Start data race checking ("+Stats.totalDataRaceCandidates +" candidates)");
+        System.out.println("\n[MinhaChecker] Start data race checking ("+Stats.totalDataRaceCandidates +" candidates)");
+
         long checkingStart = System.currentTimeMillis();
         dataRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(dataRaceCandidates);
         Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
         Stats.totalDataRacePairs = dataRaceCandidates.size();
-        System.out.println("#Data Race Candidates: "+Stats.totalDataRaceCandidates +" | #Actual Data Races: "+Stats.totalDataRacePairs);
-        for(MyPair<? extends Event,? extends Event> conf : dataRaceCandidates){
-            System.out.println("-- "+ orderedToString(conf));
-        }
+
+        System.out.println("\n#Data Race Candidates: "+Stats.totalDataRaceCandidates +" | #Actual Data Races: "+Stats.totalDataRacePairs);
+        prettyPrintDataRaces();
     }
 
     static String orderedToString(MyPair<? extends Event,? extends Event> pair) {
@@ -419,12 +418,26 @@ public class MinhaCheckerParallel {
 
         solver.writeComment("MESSAGE RACE CONSTRAINTS");
         Stats.totalMsgRaceCandidates = msgRaceCandidates.size();
-        System.out.println("[MinhaChecker] Start message race checking ("+Stats.totalMsgRaceCandidates +" candidates)");
+
+        System.out.println("\n[MinhaChecker] Start message race checking ("+Stats.totalMsgRaceCandidates +" candidates)");
+
         long checkingStart = System.currentTimeMillis();
         msgRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(msgRaceCandidates);
         Stats.checkingTimeMsgRace = System.currentTimeMillis() - checkingStart;
         Stats.totalMsgRacePairs = msgRaceCandidates.size();
-        System.out.println("#Message Race Candidates: "+Stats.totalMsgRaceCandidates +" | #Actual Message Races: "+Stats.totalMsgRacePairs);
+
+        System.out.println("\n#Message Race Candidates: "+Stats.totalMsgRaceCandidates +" | #Actual Message Races: "+Stats.totalMsgRacePairs);
+        prettyPrintMessageRaces();
+    }
+
+
+    public static void prettyPrintDataRaces(){
+        for(MyPair<? extends Event,? extends Event> race : dataRaceCandidates){
+            System.out.println("-- "+ orderedToString(race));
+        }
+    }
+
+    public static void prettyPrintMessageRaces(){
         for(MyPair<? extends Event, ? extends Event> conf : msgRaceCandidates){
             //translate SND events to their respective RCV events
             SocketEvent snd1 = (SocketEvent) conf.getFirst();
@@ -432,14 +445,78 @@ public class MinhaCheckerParallel {
             SocketEvent rcv1 = trace.msgEvents.get(snd1.getMessageId()).getSecond();
             SocketEvent rcv2 = trace.msgEvents.get(snd2.getMessageId()).getSecond();
             MyPair<SocketEvent, SocketEvent> rcv_conf = new MyPair<SocketEvent, SocketEvent>(rcv1, rcv2);
-            System.out.println("~~ "+rcv_conf);
+            System.out.println("~~ "+orderedToString(rcv_conf));
+
+            //compute read-write sets for each message handler
+            if(!trace.handlerEvents.containsKey(rcv1) || !trace.handlerEvents.containsKey(rcv2)){
+                System.out.println("\t-- No conflicts");
+            }
+            else {
+                HashSet<RWEvent> readWriteSet1 = new HashSet<RWEvent>();
+                HashSet<RWEvent> readWriteSet2 = new HashSet<RWEvent>();
+
+                for(Event e : trace.handlerEvents.get(rcv1)){
+                    if(e.getType() == EventType.READ || e.getType() == EventType.WRITE)
+                        readWriteSet1.add((RWEvent)e);
+                }
+
+                for(Event e : trace.handlerEvents.get(rcv2)){
+                    if(e.getType() == EventType.READ || e.getType() == EventType.WRITE)
+                        readWriteSet2.add((RWEvent) e);
+                }
+
+                //check for conflicts
+                for(RWEvent e1 : readWriteSet1){
+                    for(RWEvent e2 : readWriteSet2){
+                        if(e1.conflictsWith(e2)){
+                            MyPair<RWEvent, RWEvent> race = new MyPair<RWEvent, RWEvent>(e1, e2);
+                            System.out.println("\t-- conflict "+ orderedToString(race));
+                        }
+                    }
+                }
+            }
         }
+
     }
 
-    public static void initSolver() throws IOException {
+        public static void initSolver() throws IOException {
         String solverPath = props.getProperty("solver-bin"); //set up solver path
         solver = Z3SolverParallel.getInstance();
         solver.init(solverPath);
+    }
+
+    /**
+     * Builds the order constraints within a segment and returns the position in the trace in which the handler ends
+     * @return
+     */
+    public static int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException{
+
+        //constraint representing the HB relation for the thread's segment
+        StringBuilder orderConstraint = new StringBuilder();
+        int segmentIt = 0;
+
+        for(segmentIt = segmentStart; segmentIt < events.size(); segmentIt++) {
+            Event e = events.get(segmentIt);
+
+            //declare variable
+            String var = solver.declareIntVar(e.toString(), "0", "MAX");
+            solver.writeConst(var);
+
+            //append event to the thread's segment
+            orderConstraint.append(" " + e.toString());
+
+            //handle partial order within message handler
+            if (e.getType() == EventType.RCV && events.get(segmentIt + 1).getType() == EventType.HNDLBEG) {
+                segmentIt = genSegmentOrderConstraints(events, segmentIt + 1);
+            }
+            else if(e.getType() == EventType.HNDLEND)
+                break;
+        }
+
+        //write segment's order constraint
+        solver.writeConst(solver.postNamedAssert(solver.cLt(orderConstraint.toString()), "PC"));
+
+        return segmentIt;
     }
 
     public static void genProgramOrderConstraints() throws IOException {
@@ -454,70 +531,35 @@ public class MinhaCheckerParallel {
 
         //generate program order variables and constraints
         for (List<Event> events : trace.eventsPerThread.values()) {
-            boolean isMsgHandler = false;
-            if (!events.isEmpty()) {
-                //list with blocks of events encompassed by HANDLERBEGIN and HANDLEREND
-                List<String> handlingBlocks = new ArrayList<String>();
-                String globalConstHead = ""; //constraint specifying the order of events within the thread until the first handlerbegin event
-                String globalConstTail = ""; //constraint specifying the order of events within the thread from the last handlerend event till the end of the execution
 
-                for (Event e : events) {
-                    String var = solver.declareIntVar(e.toString(), "0", "MAX");
-                    solver.writeConst(var);
-
-                    if(e.getType() == EventType.HNDLBEG){
-                        handlingBlocks.add(e.toString());
-                        isMsgHandler = true;
-                    }
-                    else if(isMsgHandler){ //TODO: testar se é END aqui
-                        int last = handlingBlocks.size()-1;
-                        String handlingStr = handlingBlocks.get(last);
-                        handlingStr += (" "+e.toString());
-                        handlingBlocks.set(last,handlingStr);
-                        if(e.getType() == EventType.HNDLEND){
-                            isMsgHandler = false;
-                        }
-                    }
-                    else if(!isMsgHandler && !handlingBlocks.isEmpty()){
-                        globalConstTail += (" " + e.toString());
-                    }
-                    else{
-                        globalConstHead += (" " + e.toString());
-                    }
-                }
-
-                //only write global order constraint if there is more than one event
-                if (events.size() > 1) {
-
-                    //naive way of ensuring that the constraint is written
-                    // solely when there is more than one event in globalConstHead
-                    if(globalConstHead.indexOf("@") != globalConstHead.lastIndexOf("@"))
-                        solver.writeConst(solver.postNamedAssert(solver.cLt(globalConstHead), "PC"));
-
-                    //i) write order constraints within receive handling blocks
-                    //ii) write that last event from head sequence happens before the receive events
-                    //iii) write that first event from tail sequence happens after the receive handling events
-                    for(String hevents : handlingBlocks){
-                        //i)
-                        solver.writeConst(solver.postAssert(solver.cLt(hevents)));
-
-                        //ii)
-                        String lastFromHead = globalConstHead.substring(globalConstHead.lastIndexOf(" ")+1);
-                        int firstPos = hevents.indexOf(" ");
-                        if(firstPos!=-1) {
-                            String firstFromHandler = hevents.substring(0, hevents.indexOf(" "));
-                            solver.writeConst(solver.postAssert(solver.cLt(lastFromHead, firstFromHandler)));
-                        }
-                        //iii)
-                        if(!globalConstTail.equals("")) {
-                            int lastSpace = globalConstTail.indexOf(" ",1);
-                            String firstFromTail = globalConstTail.substring(1, lastSpace==-1?globalConstTail.length():lastSpace ); //string starts with " "
-                            String lastFromHandler = hevents.substring(hevents.lastIndexOf(" ") + 1);
-                            solver.writeConst(solver.postAssert(solver.cLt(lastFromHandler, firstFromTail)));
-                        }
-                    }
-                }
+            if (events.isEmpty())
+                continue;
+                //if there's only one event, we just need to declare it as there are no program order constraints
+            else if (events.size() == 1) {
+                String var = solver.declareIntVar(events.get(0).toString(), "0", "MAX");
+                solver.writeConst(var);
             }
+
+            //------- {
+            /* TODO: We're currently assuming no information regarding the program's control-flow. Thus, the program
+             * order must assume that all events in a thread's execution trace follow the trace order. However, in
+             * practice, the message handlers for concurrent RCV events should not have HB relation between them.
+             */
+            //generate program constraints for the thread segment
+            //genSegmentOrderConstraints(events, 0);
+            //------- }
+
+            //build program order constraints for the whole thread trace
+            StringBuilder orderConstraint = new StringBuilder();
+            for(Event e : events){
+                //declare variable
+                String var = solver.declareIntVar(e.toString(), "0", "MAX");
+                solver.writeConst(var);
+
+                //append to order constraint
+                orderConstraint.append(" "+e.toString());
+            }
+            solver.writeConst(solver.postNamedAssert(solver.cLt(orderConstraint.toString()), "PC"));
         }
     }
 
@@ -589,7 +631,7 @@ public class MinhaCheckerParallel {
 
 
     public static void genWaitNotifyConstraints() throws IOException {
-        System.out.println("[MinhaChecker] Generate locking constraints");
+        System.out.println("[MinhaChecker] Generate wait-notify constraints");
         solver.writeComment("WAIT-NOTIFY CONSTRAINTS");
         HashMap<SyncEvent, List<String>> binaryVars = new HashMap<SyncEvent, List<String>>(); //map: notify event -> list of all binary vars corresponding to that notify
 
