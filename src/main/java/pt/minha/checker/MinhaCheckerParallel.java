@@ -277,8 +277,7 @@ public class MinhaCheckerParallel {
         String loc = event.getLineOfCode();
         //Set<String> concurrencyHistory = concurrencyHistories.get(loc);
         Set<String> concurrencyContext = concurrencyContexts.get(thread);
-        MyPair<String,Integer> _key = new MyPair<String, Integer>(event.getLineOfCode(), concurrencyContext==null?0:concurrencyContext.hashCode());
-        MyPair<MyPair<String,Integer>, EventType> key = new MyPair<MyPair<String,Integer>, EventType>(_key, event.getType());
+        String key = event.getLineOfCode() + ":" + (concurrencyContext==null?0:concurrencyContext.hashCode()) + ":" + event.getType();
 
         Stack<String> stack = stacks.get(key);
 
@@ -289,8 +288,8 @@ public class MinhaCheckerParallel {
 
             //calculates the new key for the current state of the concurrency history
             // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
-            String newKey = event.getLineOfCode() + ":" + (concurrencyContext==null?0:concurrencyContext.hashCode()) + ":" + event.getType();
-            stacks.put(newKey, stack);
+            //String newKey = event.getLineOfCode() + ":" + (concurrencyContext==null?0:concurrencyContext.hashCode()) + ":" + event.getType();
+            stacks.put(key, stack);
 
             stack.push(thread);
             return false;
