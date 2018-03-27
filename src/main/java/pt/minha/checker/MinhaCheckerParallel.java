@@ -33,8 +33,6 @@ public class MinhaCheckerParallel {
     //Redundancy Elimination structures
     //Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
     public static Map<String, Set<String>> concurrencyContexts;
-    //Map: location -> concurreny history of that location (set of message ids and lock ids)
-    //public static Map<String, Set<String>> concurrencyHistories;
     //Map: location,hashCode(TETAthread)-> stack of Threads
     public static Map<String, Stack<String>> stacks;
 
@@ -85,7 +83,6 @@ public class MinhaCheckerParallel {
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
                         "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
-                    //removeRedundantMessageEvents();
                     writeCleanTrace("cleanTrace.txt");
                 }
 
@@ -160,11 +157,6 @@ public class MinhaCheckerParallel {
             System.out.println(cc.getKey() + " : " + cc.getValue());
         }
 
-        //System.out.println("Concurrency Histories:");
-        //for(Map.Entry<String, Set<String>> cc : concurrencyHistories.entrySet()) {
-        //System.out.println(cc.getKey() + " : " + cc.getValue());
-        //}
-
         System.out.println("Stacks:");
         System.out.println(stacks.entrySet().toString());
 
@@ -192,16 +184,11 @@ public class MinhaCheckerParallel {
             switch (type) {
                 case LOCK:
                     SyncEvent le = (SyncEvent) e;
-                    //temporary use of hashCode
                     Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(le.getVariable().hashCode()));
-                    //the concurrency context changed
                     break;
                 case UNLOCK:
                     SyncEvent ue = (SyncEvent) e;
-                    //temporary use of hashCode
                     concurrencyContexts.get(thread).remove(ue.getVariable().hashCode());
-                    //Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(ue.getVariable().hashCode()));
-                    //the concurrency context changed
                     break;
                 //MEM Access
                 case READ:
@@ -212,7 +199,6 @@ public class MinhaCheckerParallel {
                         events.remove();
                         //DEBUG info
                         redundantEvents.add(e.getEventNumber());
-                        //remove from readSet and writeSet
                         (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     }
@@ -275,7 +261,6 @@ public class MinhaCheckerParallel {
 
     private static boolean checkRedundancy(RWEvent event, String thread) {
         String loc = event.getLineOfCode();
-        //Set<String> concurrencyHistory = concurrencyHistories.get(loc);
         Set<String> concurrencyContext = concurrencyContexts.get(thread);
         String key = event.getLineOfCode() + ":" + (concurrencyContext==null?0:concurrencyContext.hashCode()) + ":" + event.getType();
 
@@ -283,12 +268,6 @@ public class MinhaCheckerParallel {
 
         if(stack == null) {
             stack = new Stack<String>();
-            //adds concurrency context of thread to concurrency history
-            //Utils.insertAllInMapToSet(concurrencyHistories, loc, concurrencyContexts.get(thread));
-
-            //calculates the new key for the current state of the concurrency history
-            // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
-            //String newKey = event.getLineOfCode() + ":" + (concurrencyContext==null?0:concurrencyContext.hashCode()) + ":" + event.getType();
             stacks.put(key, stack);
 
             stack.push(thread);
