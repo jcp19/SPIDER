@@ -8,8 +8,7 @@ import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.util.*;
 
 
@@ -87,6 +86,7 @@ public class MinhaCheckerParallel {
                         "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
                     //removeRedundantMessageEvents();
+                    writeCleanTrace("cleanTrace.txt");
                 }
 
                 //generate constraint model
@@ -112,6 +112,28 @@ public class MinhaCheckerParallel {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private static void writeCleanTrace(String path) {
+        PrintWriter pw = null;
+
+        try {
+            File file = new File(path);
+            FileWriter fw = new FileWriter(file, true);
+            pw = new PrintWriter(fw);
+            EventIterator events = new EventIterator(trace.eventsPerThread.values());
+            while(events.hasNext()) {
+                Event e = events.next();
+                pw.println(e);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (pw != null) {
+                pw.close();
+            }
+        }
+
     }
 /*
     private static void removeRedundantMessageEvents() {
