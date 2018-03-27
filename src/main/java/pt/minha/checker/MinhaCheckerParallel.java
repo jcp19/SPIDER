@@ -344,7 +344,7 @@ public class MinhaCheckerParallel {
 
                 if(rcv1.conflictsWith(rcv2)){
                     //make a pair with SND events because
-                    //two RCV events are racing if their respective SND events have the same order
+                    //two messages a and b are racing if RCVa || SNDb
                     SocketEvent snd1 = trace.msgEvents.get(rcv1.getMessageId()).getFirst();
                     SocketEvent snd2 = trace.msgEvents.get(rcv2.getMessageId()).getFirst();
                     MyPair<SocketEvent,SocketEvent> raceCandidate;
