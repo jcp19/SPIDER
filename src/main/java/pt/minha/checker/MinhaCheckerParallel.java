@@ -27,6 +27,10 @@ public class MinhaCheckerParallel {
     public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
     public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
 
+    //HB model
+    //used to encode message arrival constraints
+    public static HashMap<SocketEvent, Event> rcvNextEvent;
+
     // Debug data
     public static HashSet<Integer> redundantEvents;
 
@@ -57,6 +61,7 @@ public class MinhaCheckerParallel {
         dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgStacks = new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
+        rcvNextEvent = new HashMap<SocketEvent, Event>();
 
         //DEBUG
         redundantEvents = new HashSet<Integer>();
@@ -89,12 +94,8 @@ public class MinhaCheckerParallel {
                 //generate constraint model
                 initSolver();
                 long modelStart = System.currentTimeMillis();
-                genProgramOrderConstraints();
-                genCommunicationConstraints();
-                genForkStartConstraints();
-                genJoinExitConstraints();
-                genWaitNotifyConstraints();
-                genLockingConstraints();
+                genIntraNodeConstraints();
+                genInterNodeConstraints();
                 Stats.buildingModeltime = System.currentTimeMillis() - modelStart;
 
                 //check conflicts
@@ -481,16 +482,30 @@ public class MinhaCheckerParallel {
 
     }
 
-        public static void initSolver() throws IOException {
+    public static void initSolver() throws IOException {
         String solverPath = props.getProperty("solver-bin"); //set up solver path
         solver = Z3SolverParallel.getInstance();
         solver.init(solverPath);
     }
 
-    /**
-     * Builds the order constraints within a segment and returns the position in the trace in which the handler ends
-     * @return
-     */
+
+    public static void genIntraNodeConstraints() throws IOException{
+        genProgramOrderConstraints();
+        genForkStartConstraints();
+        genJoinExitConstraints();
+        genWaitNotifyConstraints();
+        genLockingConstraints();
+    }
+
+    public static void genInterNodeConstraints() throws IOException {
+        genSendReceiveConstraints();
+        genMessageHandlingConstraints();
+    }
+
+        /**
+         * Builds the order constraints within a segment and returns the position in the trace in which the handler ends
+         * @return
+         */
     public static int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException{
 
         //constraint representing the HB relation for the thread's segment
@@ -510,6 +525,10 @@ public class MinhaCheckerParallel {
             //handle partial order within message handler
             if (e.getType() == EventType.RCV && events.get(segmentIt + 1).getType() == EventType.HNDLBEG) {
                 segmentIt = genSegmentOrderConstraints(events, segmentIt + 1);
+
+                //store event next to RCV to later encode the message arrival order
+                if(segmentIt < events.size())
+                    rcvNextEvent.put((SocketEvent) e, events.get(segmentIt+1));
             }
             else if(e.getType() == EventType.HNDLEND)
                 break;
@@ -521,6 +540,11 @@ public class MinhaCheckerParallel {
         return segmentIt;
     }
 
+    /**
+     * Program order constraints encode the order within a thread's local trace. Asynchronous event handling causes
+     * the same thread to have multiple segments (i.e. handlers), which breaks global happens-before relation
+     * @throws IOException
+     */
     public static void genProgramOrderConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate program order constraints");
         solver.writeComment("PROGRAM ORDER CONSTRAINTS");
@@ -548,11 +572,11 @@ public class MinhaCheckerParallel {
              * practice, the message handlers for concurrent RCV events should not have HB relation between them.
              */
             //generate program constraints for the thread segment
-            //genSegmentOrderConstraints(events, 0);
+            genSegmentOrderConstraints(events, 0);
             //------- }
 
             //build program order constraints for the whole thread trace
-            StringBuilder orderConstraint = new StringBuilder();
+            /*StringBuilder orderConstraint = new StringBuilder();
             for(Event e : events){
                 //declare variable
                 String var = solver.declareIntVar(e.toString(), "0", "MAX");
@@ -561,11 +585,11 @@ public class MinhaCheckerParallel {
                 //append to order constraint
                 orderConstraint.append(" "+e.toString());
             }
-            solver.writeConst(solver.postNamedAssert(solver.cLt(orderConstraint.toString()), "PC"));
+            solver.writeConst(solver.postNamedAssert(solver.cLt(orderConstraint.toString()), "PC")); */
         }
     }
 
-    public static void genCommunicationConstraints() throws IOException {
+    public static void genSendReceiveConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate communication constraints");
         solver.writeComment("COMMUNICATION CONSTRAINTS");
         for (MyPair<SocketEvent, SocketEvent> pair : trace.msgEvents.values()) {
@@ -575,6 +599,67 @@ public class MinhaCheckerParallel {
             }
         }
     }
+
+    /**
+     * Message Handling constraints encode:
+     * - message handler mutual exclusion
+     * - message arrival order
+     * @throws IOException
+     */
+    public static void genMessageHandlingConstraints() throws IOException {
+        System.out.println("[MinhaChecker] Generate message handling constraints");
+        solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
+        String TAG = "HND";
+
+        HashMap<String, HashSet<SocketEvent>> rcvPerThread = new HashMap<String, HashSet<SocketEvent>>();
+
+        /* encode mutual exclusion constraints, which state that two message handlers in the same thread
+           must occur one before the other in any order */
+        for(SocketEvent rcv_i : trace.handlerEvents.keySet()){
+            //store all rcv events per thread-socket
+            String key = rcv_i.getThread()+"-"+rcv_i.getDstPort();
+            if(!rcvPerThread.containsKey(key)){
+                rcvPerThread.put(key, new HashSet<SocketEvent>());
+            }
+            rcvPerThread.get(key).add(rcv_i);
+
+            for(SocketEvent rcv_j : trace.handlerEvents.keySet()) {
+                if(rcv_i != rcv_j
+                        && rcv_i.getThread().equals(rcv_j.getThread())
+                        && rcv_i.getDstPort() == rcv_j.getDstPort()){
+
+                    //mutual exclusion: HENDi < HBEGj V HENDj < HBEGi
+                    String handlerBegin_i = trace.handlerEvents.get(rcv_i).get(0).toString();
+                    String handlerEnd_i = trace.handlerEvents.get(rcv_i).get(trace.handlerEvents.get(rcv_i).size()-1).toString();
+                    String handlerBegin_j = trace.handlerEvents.get(rcv_j).get(0).toString();
+                    String handlerEnd_j = trace.handlerEvents.get(rcv_j).get(trace.handlerEvents.get(rcv_j).size()-1).toString();
+
+                    String mutexConst = solver.cOr(solver.cLt(handlerEnd_i, handlerBegin_j), solver.cLt(handlerEnd_j, handlerBegin_i));
+                    solver.writeConst(solver.postNamedAssert(mutexConst, TAG));
+                }
+            }
+        }
+
+        /* encode possible message arrival order constraints, which state that each RCV event may be
+         * "matched with" any message on the same socket */
+        for(HashSet<SocketEvent> rcvSet : rcvPerThread.values()){
+            //for all RCVi in rcvSet :
+            //(RCVi < HNDBegin_i && HNDEnd_i < nextEvent) V (RCVi < HNDBegin_j && HNDEnd_j < nextEvent), for all j != i
+            for(SocketEvent rcv_i : rcvSet){
+                Event nextEvent = rcvNextEvent.get(rcv_i);
+                StringBuilder outerOr = new StringBuilder();
+                for(SocketEvent rcv_j : rcvSet){
+                    String handlerBegin_j = trace.handlerEvents.get(rcv_j).get(0).toString();
+                    String handlerEnd_j = trace.handlerEvents.get(rcv_j).get(trace.handlerEvents.get(rcv_j).size()-1).toString();
+                    String innerAnd = solver.cLt(rcv_i.toString()+" "+handlerBegin_j+" "+handlerEnd_j+" "+nextEvent.toString());
+                    outerOr.append(innerAnd+" ");
+                }
+                solver.writeConst(solver.postNamedAssert(solver.cOr(outerOr.toString()), TAG));
+            }
+        }
+    }
+
+
 
     public static void genForkStartConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate fork-start constraints");
