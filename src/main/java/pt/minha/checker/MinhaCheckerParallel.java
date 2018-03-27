@@ -37,7 +37,7 @@ public class MinhaCheckerParallel {
     //Map: location -> concurreny history of that location (set of message ids and lock ids)
     //public static Map<String, Set<String>> concurrencyHistories;
     //Map: location,hashCode(TETAthread)-> stack of Threads
-    public static Map<MyPair<String, Integer>, Stack<String>> stacks;
+    public static Map<MyPair<MyPair<String, Integer>, EventType>, Stack<String>> stacks;
 
     //Map: str(location pair),hashCode(TETAthread)-> stack of
     public static Map<MyPair<String, Integer>, Stack<MyPair<SocketEvent, SocketEvent>>> msgStacks;
@@ -67,7 +67,7 @@ public class MinhaCheckerParallel {
         //Redundancy-check related initializations
         concurrencyContexts = new HashMap<String, Set<String>>();
         //concurrencyHistories = new HashMap<String, Set<String>>();
-        stacks = new HashMap<MyPair<String, Integer>, Stack<String>>();
+        stacks = new HashMap<MyPair<MyPair<String, Integer>, EventType>, Stack<String>>();
 
         try {
             String propFile = "checker.racedetection.properties";
@@ -155,7 +155,7 @@ public class MinhaCheckerParallel {
     public static void removeRedundantEvents() {
         // Assumptions:
         // - The order of the events iterator corresponds to the chronological order of the events
-        // - the function getStack in ReX depends on the current state of teta-loc
+        // - the function getStack in ReX depends only on the current state of teta-loc
         Set<Event> toRemove = new HashSet<Event>();
         long count = 0;
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
@@ -255,7 +255,9 @@ public class MinhaCheckerParallel {
         String loc = event.getLineOfCode();
         //Set<String> concurrencyHistory = concurrencyHistories.get(loc);
         Set<String> concurrencyContext = concurrencyContexts.get(thread);
-        MyPair<String,Integer> key = new MyPair<String, Integer>(event.getLineOfCode(), concurrencyContext==null?0:concurrencyContext.hashCode());
+        MyPair<String,Integer> _key = new MyPair<String, Integer>(event.getLineOfCode(), concurrencyContext==null?0:concurrencyContext.hashCode());
+        MyPair<MyPair<String,Integer>, EventType> key = new MyPair<MyPair<String,Integer>, EventType>(_key, event.getType());
+
         Stack<String> stack = stacks.get(key);
 
         if(stack == null) {
@@ -265,7 +267,8 @@ public class MinhaCheckerParallel {
 
             //calculates the new key for the current state of the concurrency history
             // Set<Long> newConcurrencyHistory = concurrencyHistories.get(loc);
-            MyPair<String,Integer> newKey = new MyPair<String, Integer>(event.getLineOfCode(),concurrencyContext==null?0:concurrencyContext.hashCode() );
+            MyPair<String,Integer> _newKey = new MyPair<String, Integer>(event.getLineOfCode(),concurrencyContext==null?0:concurrencyContext.hashCode() );
+            MyPair<MyPair<String,Integer>, EventType> newKey = new MyPair<MyPair<String,Integer>, EventType>(_newKey, event.getType());
             stacks.put(newKey, stack);
 
             stack.push(thread);
