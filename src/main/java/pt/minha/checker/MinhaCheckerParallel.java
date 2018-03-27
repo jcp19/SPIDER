@@ -39,7 +39,7 @@ public class MinhaCheckerParallel {
     public static Map<String, Stack<String>> stacks;
 
     //Map: str(location pair),hashCode(TETAthread)-> stack of
-    public static Map<MyPair<String, Integer>, Stack<MyPair<SocketEvent, SocketEvent>>> msgStacks;
+    public static Map<String, Stack<MyPair<SocketEvent, SocketEvent>>> msgStacks;
 
     //solver stuff
     public static Solver solver;
@@ -58,7 +58,7 @@ public class MinhaCheckerParallel {
 
         dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
-        msgStacks = new HashMap<MyPair<String, Integer>, Stack<MyPair<SocketEvent, SocketEvent>>>();
+        msgStacks = new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
 
         //DEBUG
         redundantEvents = new HashSet<Integer>();
@@ -227,7 +227,7 @@ public class MinhaCheckerParallel {
                     //TODO falta adicionar thread de destino
                     String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLineOfCode(), rcve.getThread() + snd_rcv.getSecond().getLineOfCode()).toString();
                     concurrencyContextHash = concurrencyContext==null?0:concurrencyContext.hashCode();
-                    MyPair<String, Integer> key = new MyPair<String, Integer>(event_pair_str, concurrencyContextHash);
+                    String key = event_pair_str + ":" + concurrencyContextHash;
 
                     Stack<MyPair<SocketEvent,SocketEvent>> stack = msgStacks.get(key);
                     if(stack == null) {
