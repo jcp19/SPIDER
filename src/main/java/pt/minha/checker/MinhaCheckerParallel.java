@@ -559,20 +559,14 @@ public class MinhaCheckerParallel {
 
             if (events.isEmpty())
                 continue;
-                //if there's only one event, we just need to declare it as there are no program order constraints
+            //if there's only one event, we just need to declare it as there are no program order constraints
             else if (events.size() == 1) {
                 String var = solver.declareIntVar(events.get(0).toString(), "0", "MAX");
                 solver.writeConst(var);
             }
-
-            //------- {
-            /* TODO: We're currently assuming no information regarding the program's control-flow. Thus, the program
-             * order must assume that all events in a thread's execution trace follow the trace order. However, in
-             * practice, the message handlers for concurrent RCV events should not have HB relation between them.
-             */
             //generate program constraints for the thread segment
-            genSegmentOrderConstraints(events, 0);
-            //------- }
+            else
+                genSegmentOrderConstraints(events, 0);
 
             //build program order constraints for the whole thread trace
             /*StringBuilder orderConstraint = new StringBuilder();
