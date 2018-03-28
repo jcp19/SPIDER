@@ -390,7 +390,6 @@ public class MinhaCheckerParallel {
             return;
         }
 
-        solver.writeComment("DATA RACE CONSTRAINTS");
         Stats.totalDataRaceCandidates = dataRaceCandidates.size();
         System.out.println("\n[MinhaChecker] Start data race checking ("+Stats.totalDataRaceCandidates +" candidates)");
 
@@ -419,7 +418,6 @@ public class MinhaCheckerParallel {
             return;
         }
 
-        solver.writeComment("MESSAGE RACE CONSTRAINTS");
         Stats.totalMsgRaceCandidates = msgRaceCandidates.size();
 
         System.out.println("\n[MinhaChecker] Start message race checking ("+Stats.totalMsgRaceCandidates +" candidates)");
@@ -445,8 +443,9 @@ public class MinhaCheckerParallel {
             //translate SND events to their respective RCV events
             SocketEvent snd1 = (SocketEvent) conf.getFirst();
             SocketEvent snd2 = (SocketEvent) conf.getSecond();
-            SocketEvent rcv1 = trace.msgEvents.get(snd1.getMessageId()).getSecond();
-            SocketEvent rcv2 = trace.msgEvents.get(snd2.getMessageId()).getSecond();
+            //TODO: double check if this covers all cases of partitioned messages
+            SocketEvent rcv1 = trace.msgEvents.containsKey(snd1.getMessageId()) ? trace.msgEvents.get(snd1.getMessageId()).getSecond() : trace.msgEvents.get(snd1.getMessageId()+".0").getSecond();
+            SocketEvent rcv2 = trace.msgEvents.containsKey(snd2.getMessageId()) ? trace.msgEvents.get(snd2.getMessageId()).getSecond() : trace.msgEvents.get(snd2.getMessageId()+".0").getSecond();
             MyPair<SocketEvent, SocketEvent> rcv_conf = new MyPair<SocketEvent, SocketEvent>(rcv1, rcv2);
             System.out.println("~~ "+orderedToString(rcv_conf));
 
@@ -591,10 +590,19 @@ public class MinhaCheckerParallel {
 
     public static void genSendReceiveConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate communication constraints");
-        solver.writeComment("COMMUNICATION CONSTRAINTS");
+        solver.writeComment("SEND-RECEIVE CONSTRAINTS");
         for (MyPair<SocketEvent, SocketEvent> pair : trace.msgEvents.values()) {
             if(pair.getFirst()!= null && pair.getSecond()!=null) {
-                String cnst = solver.cLt(pair.getFirst().toString(), pair.getSecond().toString());
+                SocketEvent rcv = pair.getSecond();
+                String cnst = "";
+                //if there are message handler, order SND with HANDLERBEGIN instead of RCV
+                if(!trace.handlerEvents.containsKey(rcv))
+                    cnst = solver.cLt(pair.getFirst().toString(), pair.getSecond().toString());
+                else{
+                    Event handlerbegin = trace.handlerEvents.get(rcv).get(0);
+                    cnst = solver.cLt(pair.getFirst().toString(), handlerbegin.toString());
+                }
+
                 solver.writeConst(solver.postNamedAssert(cnst,"COM"));
             }
         }
