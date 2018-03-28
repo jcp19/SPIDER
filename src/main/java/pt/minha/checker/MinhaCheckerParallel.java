@@ -649,6 +649,11 @@ public class MinhaCheckerParallel {
             //(RCVi < HNDBegin_i && HNDEnd_i < nextEvent) V (RCVi < HNDBegin_j && HNDEnd_j < nextEvent), for all j != i
             for(SocketEvent rcv_i : rcvSet){
                 Event nextEvent = rcvNextEvent.get(rcv_i);
+
+                //if the RCV is the last event, then nextEvent == null
+                if(nextEvent == null)
+                    continue;
+
                 StringBuilder outerOr = new StringBuilder();
                 for(SocketEvent rcv_j : rcvSet){
                     String handlerBegin_j = trace.handlerEvents.get(rcv_j).get(0).toString();
