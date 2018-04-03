@@ -229,9 +229,15 @@ public class MinhaCheckerParallel {
 
                     if(stack.size() >= 2) {
                         //TODO: remove the first element of the stack
-                        toRemove.add(snd_rcv.getFirst());
-                        toRemove.add(snd_rcv.getSecond());
-                        trace.msgEvents.remove(rcve.getMessageId());
+                        MyPair<SocketEvent, SocketEvent> tmp_pair = stack.get(0);
+                        //toRemove.add(snd_rcv.getFirst());
+                        //toRemove.add(snd_rcv.getSecond());
+                        //trace.msgEvents.remove(rcve.getMessageId());
+                        toRemove.add(tmp_pair.getFirst());
+                        toRemove.add(tmp_pair.getSecond());
+                        trace.msgEvents.remove(tmp_pair.getFirst().getMessageId());
+                        stack.remove(0);
+                        stack.push(tmp_pair);
                     } else {
                         stack.push(snd_rcv);
                     }
