@@ -547,11 +547,13 @@ public class MinhaCheckerParallel {
             orderConstraint.append(" " + e.toString());
 
             //handle partial order within message handler
-            if (e.getType() == EventType.RCV && events.get(segmentIt + 1).getType() == EventType.HNDLBEG) {
+            if (e.getType() == EventType.RCV &&
+                    segmentIt < (events.size() - 1) &&
+                    events.get(segmentIt + 1).getType() == EventType.HNDLBEG) {
                 segmentIt = genSegmentOrderConstraints(events, segmentIt + 1);
 
                 //store event next to RCV to later encode the message arrival order
-                if(segmentIt < events.size())
+                if(segmentIt < events.size() - 1)
                     rcvNextEvent.put((SocketEvent) e, events.get(segmentIt+1));
             }
             else if(e.getType() == EventType.HNDLEND)
@@ -698,8 +700,12 @@ public class MinhaCheckerParallel {
         solver.writeComment("FORK-START CONSTRAINTS");
         for(List<ThreadCreationEvent> l : trace.forkEvents.values()){
             for(ThreadCreationEvent e : l){
-                String cnst = solver.cLt(e.toString(), "START_"+e.getChildThread());
-                solver.writeConst(solver.postNamedAssert(cnst,"FS"));
+
+                //don't add fork-start constraints for threads that are spawned but don't start
+                if(trace.eventsPerThread.containsKey(e.getChildThread())) {
+                    String cnst = solver.cLt(e.toString(), "START_" + e.getChildThread());
+                    solver.writeConst(solver.postNamedAssert(cnst, "FS"));
+                }
             }
         }
     }
