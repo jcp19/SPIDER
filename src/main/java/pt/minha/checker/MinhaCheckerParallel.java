@@ -177,6 +177,7 @@ public class MinhaCheckerParallel {
         Set<Event> toRemove = new HashSet<Event>();
         // Stores for each SND the corresponding MsgContext
         Map<String, Integer> eventId2Context = new HashMap<String, Integer>();
+        //Set<String> cantRemove = new HashSet<String>();
         long count = 0;
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
         while(events.hasNext()) {
@@ -206,6 +207,7 @@ public class MinhaCheckerParallel {
                         events.remove();
                         //DEBUG info
                         redundantEvents.add(e.getEventNumber());
+                        System.out.println("DEBUG: Removed event " + e.toString());
                         (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     }
@@ -219,7 +221,10 @@ public class MinhaCheckerParallel {
 
                     String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLineOfCode(), rcve.getThread() + snd_rcv.getSecond().getLineOfCode()).toString();
                     concurrencyContextHash = concurrencyContext==null?0:concurrencyContext.hashCode();
-                    String key = msgContexts.get(snd_rcv.getFirst().getMessageId()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
+                    //String key = msgContexts.get(snd_rcv.getFirst().getMessageId()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
+                    //System.out.println("Key ==> " + e.getThread());
+                    String key = msgContexts.get(e.getThread()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
+                    //System.out.println("Key:" + key);
 
                     Stack<MyPair<SocketEvent,SocketEvent>> stack = msgStacks.get(key);
                     if(stack == null) {
@@ -228,16 +233,18 @@ public class MinhaCheckerParallel {
                     }
 
                     if(stack.size() >= 2) {
+                        // && !cantRemove.contains(key)
                         //TODO: remove the first element of the stack
-                        MyPair<SocketEvent, SocketEvent> tmp_pair = stack.get(0);
+                        MyPair<SocketEvent, SocketEvent> tmp_pair = stack.pop();
                         //toRemove.add(snd_rcv.getFirst());
                         //toRemove.add(snd_rcv.getSecond());
                         //trace.msgEvents.remove(rcve.getMessageId());
                         toRemove.add(tmp_pair.getFirst());
                         toRemove.add(tmp_pair.getSecond());
                         trace.msgEvents.remove(tmp_pair.getFirst().getMessageId());
-                        stack.remove(0);
-                        stack.push(tmp_pair);
+                        //stack.remove(0);
+                        stack.push(snd_rcv);
+                        //cantRemove.add(key);
                     } else {
                         stack.push(snd_rcv);
                     }
@@ -264,7 +271,16 @@ public class MinhaCheckerParallel {
         Stats.redundantSocketEvents = toRemove.size();
         Stats.redundantEvents = count;
         removeSocketEvents(toRemove);
+        //printRedundantEvents();
     }
+
+    /*
+    private static void printRedundantEvents() {
+        for(Event e : redundantEvents) {
+
+        }
+    }
+    */
 
     private static int getMsgContext(String thread) {
         Integer counter = msgContexts.get(thread);
@@ -273,8 +289,10 @@ public class MinhaCheckerParallel {
 
     private static void incrementMsgContext(String thread) {
         Integer counter = getMsgContext(thread);
-        counter++;
-        msgContexts.put(thread, counter);
+        int c = counter == null? 0 : counter;
+        c++;
+        msgContexts.put(thread, c);
+        //System.out.println("Key--Thread "+ thread + " C: "+ c);
     }
 
     private static void removeSocketEvents(Set<Event> toRemove) {
