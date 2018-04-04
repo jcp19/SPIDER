@@ -200,60 +200,60 @@ public class MinhaCheckerParallel {
                 //MEM Access
                 case READ:
                 case WRITE:
-                    incrementMsgContext(thread);
+                    //incrementMsgContext(thread);
                     RWEvent rwe = (RWEvent) e;
                     if(checkRedundancy(rwe, thread)) {
                         //if an event is redundant, remove from the trace
                         events.remove();
                         //DEBUG info
                         redundantEvents.add(e.getEventNumber());
-                        System.out.println("DEBUG: Removed event " + e.toString());
+                        //System.out.println("DEBUG: Removed event " + e.toString());
                         (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     }
                     break;
                 case RCV:
                     // remove message redundancy
-                    SocketEvent rcve = (SocketEvent) e;
-                    int concurrencyContextHash;
-                    MyPair<SocketEvent, SocketEvent> snd_rcv = trace.msgEvents.get(rcve.getMessageId());
-                    Set<String> concurrencyContext = concurrencyContexts.get(thread);
-
-                    String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLineOfCode(), rcve.getThread() + snd_rcv.getSecond().getLineOfCode()).toString();
-                    concurrencyContextHash = concurrencyContext==null?0:concurrencyContext.hashCode();
-                    //String key = msgContexts.get(snd_rcv.getFirst().getMessageId()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
-                    //System.out.println("Key ==> " + e.getThread());
-                    String key = msgContexts.get(e.getThread()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
-                    //System.out.println("Key:" + key);
-
-                    Stack<MyPair<SocketEvent,SocketEvent>> stack = msgStacks.get(key);
-                    if(stack == null) {
-                        stack = new Stack<MyPair<SocketEvent,SocketEvent>>();
-                        msgStacks.put(key,stack);
-                    }
-
-                    if(stack.size() >= 2) {
-                        // && !cantRemove.contains(key)
-                        //TODO: remove the first element of the stack
-                        MyPair<SocketEvent, SocketEvent> tmp_pair = stack.pop();
-                        //toRemove.add(snd_rcv.getFirst());
-                        //toRemove.add(snd_rcv.getSecond());
-                        //trace.msgEvents.remove(rcve.getMessageId());
-                        toRemove.add(tmp_pair.getFirst());
-                        toRemove.add(tmp_pair.getSecond());
-                        trace.msgEvents.remove(tmp_pair.getFirst().getMessageId());
-                        //stack.remove(0);
-                        stack.push(snd_rcv);
-                        //cantRemove.add(key);
-                    } else {
-                        stack.push(snd_rcv);
-                    }
+//                    SocketEvent rcve = (SocketEvent) e;
+//                    int concurrencyContextHash;
+//                    MyPair<SocketEvent, SocketEvent> snd_rcv = trace.msgEvents.get(rcve.getMessageId());
+//                    Set<String> concurrencyContext = concurrencyContexts.get(thread);
+//
+//                    String event_pair_str = new MyPair<String, String>(snd_rcv.getFirst().getLineOfCode(), rcve.getThread() + snd_rcv.getSecond().getLineOfCode()).toString();
+//                    concurrencyContextHash = concurrencyContext==null?0:concurrencyContext.hashCode();
+//                    //String key = msgContexts.get(snd_rcv.getFirst().getMessageId()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
+//                    //System.out.println("Key ==> " + e.getThread());
+//                    String key = msgContexts.get(e.getThread()) + ":" +  event_pair_str + ":" + concurrencyContextHash;
+//                    //System.out.println("Key:" + key);
+//
+//                    Stack<MyPair<SocketEvent,SocketEvent>> stack = msgStacks.get(key);
+//                    if(stack == null) {
+//                        stack = new Stack<MyPair<SocketEvent,SocketEvent>>();
+//                        msgStacks.put(key,stack);
+//                    }
+//
+//                    if(stack.size() >= 2) {
+//                        // && !cantRemove.contains(key)
+//                        //TODO: remove the first element of the stack
+//                        MyPair<SocketEvent, SocketEvent> tmp_pair = stack.pop();
+//                        //toRemove.add(snd_rcv.getFirst());
+//                        //toRemove.add(snd_rcv.getSecond());
+//                        //trace.msgEvents.remove(rcve.getMessageId());
+//                        toRemove.add(tmp_pair.getFirst());
+//                        toRemove.add(tmp_pair.getSecond());
+//                        trace.msgEvents.remove(tmp_pair.getFirst().getMessageId());
+//                        //stack.remove(0);
+//                        stack.push(snd_rcv);
+//                        //cantRemove.add(key);
+//                    } else {
+//                        stack.push(snd_rcv);
+//                    }
 
                     break;
                 case SND:
                     SocketEvent se = (SocketEvent) e;
                     Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
-                    eventId2Context.put(se.getMessageId(), getMsgContext(thread));
+                    //eventId2Context.put(se.getMessageId(), getMsgContext(thread));
                     break;
                 case CREATE:
                     // handles CREATE events the same way it handles SND
@@ -271,16 +271,7 @@ public class MinhaCheckerParallel {
         Stats.redundantSocketEvents = toRemove.size();
         Stats.redundantEvents = count;
         removeSocketEvents(toRemove);
-        //printRedundantEvents();
     }
-
-    /*
-    private static void printRedundantEvents() {
-        for(Event e : redundantEvents) {
-
-        }
-    }
-    */
 
     private static int getMsgContext(String thread) {
         Integer counter = msgContexts.get(thread);
