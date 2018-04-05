@@ -216,12 +216,46 @@ public class MinhaCheckerParallel {
 
 
     private static boolean canRemoveBlock(List<Event> block) {
-        return false;
+        int i = 0;
+        for(Event e : block) {
+            i++;
+            EventType type = e.getType();
+            switch(type) {
+                case SND:
+                case RCV:
+                    // fall trhough
+                case WRITE:
+                case READ:
+                    return false;
+                case CREATE:
+                    //possible failure: a block ol LOCK and UNLOCK might contain a CREATE and NOT its corresponding JOIN!!
+                    // return false in those cases??
+                    //Event join = trace.getCorrespondingJoin(e);
+                    //int index = block.indexOf(join);
+
+
+                    break;
+                case LOCK:
+
+                    break;
+
+                case HNDLBEG:
+
+                case START:
+
+                default:
+                    break;
+            }
+        }
+        return true;
     }
 
     private static void pruneEvents() {
+        //can be optimized to check only once every part of the code
         Set<String> checkedThreads = new HashSet<String>();
+        Set<String> threadsToRemove = new HashSet<String>();
         Set<Event> toRemove;
+        int prunedEvents = 0;
 
         for(String thread : trace.eventsPerThread.keySet()) {
             int i = 0;
@@ -242,31 +276,88 @@ public class MinhaCheckerParallel {
                     case CREATE:
                         ThreadCreationEvent tce = (ThreadCreationEvent) e;
                         //adicionar thread criada às consultadas
-                        if(canRemoveBlock(trace.eventsPerThread.get(tce.getChildThread()))) {
-                            toRemove.addAll(trace.eventsPerThread.get(tce.getChildThread()));
-                            toRemove.add(e);
-                            toRemove.add(trace.getCorrespondingJoin(e)); // remover o evento de join correspondente
+                        //if(canRemoveBlock(trace.eventsPerThread.get(tce.getChildThread()))) {
+                        if(canRemoveThread(trace.eventsPerThread.get(tce.getChildThread()))) {
+                            //toRemove.addAll(trace.eventsPerThread.get(tce.getChildThread()));
+
+                            // marks events to remove instead of removing in order to prevent changes in the
+                            // iterated collection
+                            ThreadCreationEvent join = trace.getCorrespondingJoin(tce);
+                            toRemove.add(tce);
+                            toRemove.add(join);
                             checkedThreads.add(tce.getChildThread());
+                            threadsToRemove.add(tce.getChildThread());
+
+                            //remove events from corresponding data structures
+                            trace.forkEvents.get(thread).remove(tce);
+                            trace.joinEvents.get(thread).remove(join);
+                            prunedEvents += 2;
                         }
                         break;
 
                     //TODO - add
                     //case START:
                     //    break;
-                    case LOCK:
-                        SyncEvent unlockEvent = trace.getCorrespondingUnlock((SyncEvent) e);
-                        List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-                        if(canRemoveBlock(subTrace)) {
-                            toRemove.addAll(subTrace);
-                        }
-                        break;
+                    //TODO - handler begin
+//                    case LOCK:
+//                        SyncEvent unlockEvent = trace.getCorrespondingUnlock((SyncEvent) e);
+//                        List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
+//                        if(canRemoveBlock(subTrace)) {
+//                            toRemove.addAll(subTrace);
+//                        }
+//                        break;
                     default:
                         break;
                 }
                 i++;
             }
+            //TODO: remove events from other data structures
             checkedThreads.add(thread);
+            System.out.println("To Remove: " + toRemove);
+            events.removeAll(toRemove);
         }
+        //trace.eventsPerThread.keySet().removeAll(threadsToRemove);
+
+        // Cleaning of data structures
+        for(String thread : threadsToRemove) {
+            List<Event> events = trace.eventsPerThread.remove(thread);
+            prunedEvents += events.size();
+            trace.forkEvents.remove(thread);
+            trace.joinEvents.remove(thread);
+            for(Event e : events) {
+                EventType type = e.getType();
+                if(type == LOCK) {
+                    //removes both lock and unlock
+                    MyPair<SyncEvent, SyncEvent> delete = null;
+                    SyncEvent se = (SyncEvent) e;
+                    List<MyPair<SyncEvent,SyncEvent>> lockEvents = trace.lockEvents.get(se.getVariable());
+                    for(MyPair<SyncEvent, SyncEvent> s : lockEvents) {
+                        if(s.getFirst().equals(se)) {
+                            delete = s;
+                            break;
+                        }
+                    }
+                    lockEvents.remove(delete);
+                }
+            }
+        }
+        Stats.prunedEvents = prunedEvents;
+
+    }
+
+    private static boolean canRemoveThread(List<Event> events) {
+        for(Event e : events) {
+            EventType type = e.getType();
+            if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
+                return false;
+            } else if(type == CREATE) {
+                ThreadCreationEvent tce = (ThreadCreationEvent) e;
+                if(!canRemoveThread(trace.eventsPerThread.get(tce.getChildThread()))) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static boolean checkRedundancy(RWEvent event, String thread) {

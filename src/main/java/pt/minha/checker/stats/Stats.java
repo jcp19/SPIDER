@@ -10,6 +10,7 @@ public class Stats {
     public static long numConstraints = 0;
     public static long redundantEvents = 0;
     public static long redundantSocketEvents = 0;
+    public static long prunedEvents = 0;
     public static double buildingModeltime = 0;
 
     //data race variables
@@ -29,6 +30,7 @@ public class Stats {
         System.out.println("> Number of events in trace:\t\t\t"+numEventsTrace);
         System.out.println("> Number of redundant events in trace:\t\t"+redundantEvents);
         System.out.println("> Number of redundant socket events in trace:\t"+redundantSocketEvents);
+        System.out.println("> Number of pruned events in trace:\t\t"+prunedEvents);
         System.out.println("> Number of constraints in model:\t\t"+numConstraints);
         System.out.println("> Time to generate constraint model:\t\t"+(buildingModeltime/(double)1000)+" seconds");
         System.out.println("\n## DATA RACES:");
