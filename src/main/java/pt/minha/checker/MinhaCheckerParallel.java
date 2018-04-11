@@ -179,9 +179,9 @@ public class MinhaCheckerParallel {
                     SyncEvent ue = (SyncEvent) e;
                     concurrencyContexts.get(thread).remove(ue.getVariable().hashCode());
                     break;
-                //MEM Access
                 case READ:
                 case WRITE:
+                    //MEM Access
                     RWEvent rwe = (RWEvent) e;
                     if(checkRedundancy(rwe, thread)) {
                         //if an event is redundant, remove from the trace
@@ -192,8 +192,6 @@ public class MinhaCheckerParallel {
                         (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     }
-                    break;
-                case RCV:
                     break;
                 case SND:
                     SocketEvent se = (SocketEvent) e;
@@ -227,16 +225,7 @@ public class MinhaCheckerParallel {
                 case WRITE:
                 case READ:
                     return false;
-                case CREATE:
-                    //possible failure: a block ol LOCK and UNLOCK might contain a CREATE and NOT its corresponding JOIN!!
-                    // return false in those cases??
-                    //Event join = trace.getCorrespondingJoin(e);
-                    //int index = block.indexOf(join);
-
-
-                    break;
                 case LOCK:
-
                     break;
 
                 case HNDLBEG:
@@ -275,9 +264,10 @@ public class MinhaCheckerParallel {
                     //thread
                     case CREATE:
                         ThreadCreationEvent tce = (ThreadCreationEvent) e;
+                        String child = tce.getChildThread();
                         //adicionar thread criada às consultadas
                         //if(canRemoveBlock(trace.eventsPerThread.get(tce.getChildThread()))) {
-                        if(canRemoveThread(trace.eventsPerThread.get(tce.getChildThread()))) {
+                        if(threadsToRemove.contains(child) || canRemoveThread(trace.eventsPerThread.get(child))) {
                             //toRemove.addAll(trace.eventsPerThread.get(tce.getChildThread()));
 
                             // marks events to remove instead of removing in order to prevent changes in the
@@ -285,13 +275,18 @@ public class MinhaCheckerParallel {
                             ThreadCreationEvent join = trace.getCorrespondingJoin(tce);
                             toRemove.add(tce);
                             toRemove.add(join);
-                            checkedThreads.add(tce.getChildThread());
-                            threadsToRemove.add(tce.getChildThread());
+                            checkedThreads.add(child);
+                            threadsToRemove.add(child);
 
                             //remove events from corresponding data structures
                             trace.forkEvents.get(thread).remove(tce);
-                            trace.joinEvents.get(thread).remove(join);
-                            prunedEvents += 2;
+                            prunedEvents += 1;
+
+                            List<ThreadCreationEvent> joins = trace.joinEvents.get(thread);
+                            if(joins != null) {
+                                joins.remove(join);
+                                prunedEvents += 1;
+                            }
                         }
                         break;
 
@@ -299,13 +294,18 @@ public class MinhaCheckerParallel {
                     //case START:
                     //    break;
                     //TODO - handler begin
-//                    case LOCK:
-//                        SyncEvent unlockEvent = trace.getCorrespondingUnlock((SyncEvent) e);
-//                        List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-//                        if(canRemoveBlock(subTrace)) {
-//                            toRemove.addAll(subTrace);
-//                        }
-//                        break;
+                    case LOCK:
+                        /*
+                        SyncEvent lockEvent = (SyncEvent) e;
+                        SyncEvent unlockEvent = trace.getCorrespondingUnlock(lockEvent);
+                        List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
+                        if(canRemoveLockBlock(subTrace, toRemove, lockEvent.getVariable())) {
+                            toRemove.add(e);
+                            toRemove.add(unlockEvent);
+                            //toRemove.addAll(subTrace);
+                        }
+                        */
+                        break;
                     default:
                         break;
                 }
@@ -343,6 +343,21 @@ public class MinhaCheckerParallel {
         }
         Stats.prunedEvents = prunedEvents;
 
+    }
+
+    private static boolean canRemoveLockBlock(List<Event> subseq, Set<Event> toRemove, String variable) {
+         for(Event e : subseq.subList(1, subseq.size())) {
+            EventType type = e.getType();
+            if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
+                return false;
+            } else if(type == LOCK) {
+                if(((SyncEvent) e).getVariable().equals(variable)) {
+                    //if the lock is reentrant
+                    toRemove.add(e);
+                }
+            }
+        }
+        return true;
     }
 
     private static boolean canRemoveThread(List<Event> events) {
