@@ -92,9 +92,10 @@ public class MinhaCheckerParallel {
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
                         "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
+                    //writeTrace("toCleanTrace.txt");
                     pruneEvents();
+                    //writeTrace("cleanTrace.txt");
                 }
-                //writeCleanTrace("cleanTrace.txt");
 
                 //generate constraint model
                 initSolver();
@@ -117,7 +118,7 @@ public class MinhaCheckerParallel {
         }
     }
 
-    private static void writeCleanTrace(String path) {
+    private static void writeTrace(String path) {
         PrintWriter pw = null;
 
         try {
@@ -274,7 +275,6 @@ public class MinhaCheckerParallel {
                             // iterated collection
                             ThreadCreationEvent join = trace.getCorrespondingJoin(tce);
                             toRemove.add(tce);
-                            toRemove.add(join);
                             checkedThreads.add(child);
                             threadsToRemove.add(child);
 
@@ -284,6 +284,7 @@ public class MinhaCheckerParallel {
 
                             List<ThreadCreationEvent> joins = trace.joinEvents.get(thread);
                             if(joins != null) {
+                                toRemove.add(join);
                                 joins.remove(join);
                                 prunedEvents += 1;
                             }
@@ -295,16 +296,16 @@ public class MinhaCheckerParallel {
                     //    break;
                     //TODO - handler begin
                     case LOCK:
-                        /*
                         SyncEvent lockEvent = (SyncEvent) e;
                         SyncEvent unlockEvent = trace.getCorrespondingUnlock(lockEvent);
-                        List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-                        if(canRemoveLockBlock(subTrace, toRemove, lockEvent.getVariable())) {
-                            toRemove.add(e);
-                            toRemove.add(unlockEvent);
-                            //toRemove.addAll(subTrace);
+                        if(unlockEvent != null) {
+                            List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
+                            if (canRemoveLockBlock(subTrace, toRemove, lockEvent.getVariable())) {
+                                toRemove.add(e);
+                                toRemove.add(unlockEvent);
+                                //toRemove.addAll(subTrace);
+                            }
                         }
-                        */
                         break;
                     default:
                         break;
@@ -321,6 +322,7 @@ public class MinhaCheckerParallel {
         // Cleaning of data structures
         for(String thread : threadsToRemove) {
             List<Event> events = trace.eventsPerThread.remove(thread);
+            System.out.println("Removed Events ==> " + events);
             prunedEvents += events.size();
             trace.forkEvents.remove(thread);
             trace.joinEvents.remove(thread);
@@ -350,12 +352,18 @@ public class MinhaCheckerParallel {
             EventType type = e.getType();
             if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
                 return false;
-            } else if(type == LOCK) {
+            } else if(type == CREATE) {
+                ThreadCreationEvent tce = (ThreadCreationEvent) e;
+                if(!canRemoveThread(trace.eventsPerThread.get(tce.getChildThread()))) {
+                    return false;
+                }
+            }
+            /* else if(type == LOCK) {
                 if(((SyncEvent) e).getVariable().equals(variable)) {
                     //if the lock is reentrant
                     toRemove.add(e);
                 }
-            }
+            } */
         }
         return true;
     }
