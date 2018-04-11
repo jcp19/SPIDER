@@ -213,33 +213,6 @@ public class MinhaCheckerParallel {
         Stats.redundantEvents = count;
     }
 
-
-    private static boolean canRemoveBlock(List<Event> block) {
-        int i = 0;
-        for(Event e : block) {
-            i++;
-            EventType type = e.getType();
-            switch(type) {
-                case SND:
-                case RCV:
-                    // fall trhough
-                case WRITE:
-                case READ:
-                    return false;
-                case LOCK:
-                    break;
-
-                case HNDLBEG:
-
-                case START:
-
-                default:
-                    break;
-            }
-        }
-        return true;
-    }
-
     private static void pruneEvents() {
         //can be optimized to check only once every part of the code
         Set<String> checkedThreads = new HashSet<String>();
@@ -267,10 +240,7 @@ public class MinhaCheckerParallel {
                         ThreadCreationEvent tce = (ThreadCreationEvent) e;
                         String child = tce.getChildThread();
                         //adicionar thread criada às consultadas
-                        //if(canRemoveBlock(trace.eventsPerThread.get(tce.getChildThread()))) {
                         if(threadsToRemove.contains(child) || canRemoveThread(trace.eventsPerThread.get(child))) {
-                            //toRemove.addAll(trace.eventsPerThread.get(tce.getChildThread()));
-
                             // marks events to remove instead of removing in order to prevent changes in the
                             // iterated collection
                             ThreadCreationEvent join = trace.getCorrespondingJoin(tce);
@@ -291,9 +261,6 @@ public class MinhaCheckerParallel {
                         }
                         break;
 
-                    //TODO - add
-                    //case START:
-                    //    break;
                     //TODO - handler begin
                     case LOCK:
                         SyncEvent lockEvent = (SyncEvent) e;
@@ -303,7 +270,6 @@ public class MinhaCheckerParallel {
                             if (canRemoveLockBlock(subTrace, toRemove, lockEvent.getVariable())) {
                                 toRemove.add(e);
                                 toRemove.add(unlockEvent);
-                                //toRemove.addAll(subTrace);
                             }
                         }
                         break;
@@ -317,7 +283,6 @@ public class MinhaCheckerParallel {
             System.out.println("To Remove: " + toRemove);
             events.removeAll(toRemove);
         }
-        //trace.eventsPerThread.keySet().removeAll(threadsToRemove);
 
         // Cleaning of data structures
         for(String thread : threadsToRemove) {
