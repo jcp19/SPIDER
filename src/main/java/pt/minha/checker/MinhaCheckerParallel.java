@@ -27,6 +27,7 @@ public class MinhaCheckerParallel {
     //data structures
     public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
     public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
+    public static HashSet<MyPair<SocketEvent, SocketEvent>> redundantSndRcv;
 
     //HB model
     //used to encode message arrival constraints
@@ -34,6 +35,9 @@ public class MinhaCheckerParallel {
 
     // Debug data
     public static HashSet<Integer> redundantEvents;
+
+    //Metadata for detecting possible redundant send/receives
+    static Map<String, Integer> threadCounters;
 
     //Redundancy Elimination structures
     //Map: thread id -> Msg Context (Counter)
@@ -66,6 +70,7 @@ public class MinhaCheckerParallel {
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgStacks = new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
         rcvNextEvent = new HashMap<SocketEvent, Event>();
+        redundantSndRcv = new HashSet<MyPair<SocketEvent, SocketEvent>>();
 
         //DEBUG
         redundantEvents = new HashSet<Integer>();
@@ -163,6 +168,18 @@ public class MinhaCheckerParallel {
         //  the function getStack in ReX depends only on the current state of teta-loc
         long count = 0;
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
+        //Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) -> stack of pairs SND/RCV
+        Map<String, Stack<MyPair<SocketEvent, SocketEvent>>> socketStacks =
+                new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
+
+        // Records for each SND event its corresponding thread counter
+        Map<Event, Integer> countersOnEvents = new HashMap<Event, Integer>();
+        threadCounters = new HashMap<String, Integer>();
+
+        for(String thread : trace.eventsPerThread.keySet()) {
+            threadCounters.put(thread, 0);
+        }
+
         while(events.hasNext()) {
             Event e = events.next();
             String thread = e.getThread();
@@ -192,11 +209,36 @@ public class MinhaCheckerParallel {
                         //System.out.println("DEBUG: Removed event " + e.toString());
                         (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
+                    } else {
+                        threadCounters.put(thread, threadCounters.get(thread)+1);
                     }
                     break;
                 case SND:
                     SocketEvent se = (SocketEvent) e;
                     Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
+                    countersOnEvents.put(e, threadCounters.get(thread));
+                    break;
+                case RCV:
+                    SocketEvent rcve = (SocketEvent) e;
+                    String messageId = rcve.getMessageId();
+                    SocketEvent snde = trace.sndFromMessageId(messageId);
+
+                    String key = snde.getLineOfCode() + ":" + countersOnEvents.get(snde) + "::" + rcve.getLineOfCode() +
+                            ":" + threadCounters.get(thread);
+                    Stack<MyPair<SocketEvent, SocketEvent>> s = socketStacks.get(key);
+
+                    if(s == null) {
+                        s = new Stack<MyPair<SocketEvent, SocketEvent>>();
+                        socketStacks.put(key, s);
+                    }
+
+                    if(s.size() >= 2) {
+                        //System.out.println("REDUNDANT SEND: " + snde);
+                        redundantSndRcv.add(new MyPair<SocketEvent, SocketEvent>(snde,rcve));
+                    } else {
+                        s.push(trace.msgEvents.get(messageId));
+                    }
+
                     break;
                 case CREATE:
                     // handles CREATE events the same way it handles SND
@@ -213,12 +255,37 @@ public class MinhaCheckerParallel {
         Stats.redundantEvents = count;
     }
 
+    private static <X,Y> MyPair<X,Y> getPairWithSameSecondTerm(Collection<MyPair<X,Y>> coll, Y term) {
+        if(term == null) {
+            for(MyPair<X,Y> pair : coll) {
+                Y snd = pair.getSecond();
+                if(snd == null)
+                    return pair;
+            }
+            return null;
+        }
+
+        for(MyPair<X,Y> pair : coll) {
+            Y snd = pair.getSecond();
+            if(term.equals(snd)) {
+                return pair;
+            }
+        }
+
+        return null;
+    }
+
+    private static <X,Y> boolean contains2ndTerm(Collection<MyPair<X,Y>> coll, Y elem) {
+        return getPairWithSameSecondTerm(coll, elem) != null;
+    }
+
     private static void pruneEvents() {
         //can be optimized to check only once every part of the code
         Set<String> checkedThreads = new HashSet<String>();
         Set<String> threadsToRemove = new HashSet<String>();
         Set<Event> toRemove;
         int prunedEvents = 0;
+
 
         for(String thread : trace.eventsPerThread.keySet()) {
             int i = 0;
@@ -261,13 +328,49 @@ public class MinhaCheckerParallel {
                         }
                         break;
 
+
+                    case READ:
+                    case WRITE:
+                        //TODO increment thread context
+
+                        break;
                     //TODO - handler begin
+                    case HNDLBEG:
+
+                        break;
+                    case RCV:
+                        List<Event> handler = trace.handlerEvents.get(e);
+                        MyPair<SocketEvent, SocketEvent> pair = getPairWithSameSecondTerm(redundantSndRcv, (SocketEvent) e);
+
+                        //if the send/rcv is redundant and there is no message handler
+                        if(handler == null && pair != null) {
+                            toRemove.add(pair.getFirst());
+                            toRemove.add(pair.getSecond());
+                            redundantSndRcv.remove(pair);
+                            System.out.println("REMOVED PAIR: " + pair);
+                        }
+
+
+                        //Steps:
+                        //- get position of both snd and rcvs
+                        //- concatenate with both counters from threads
+                        //- if there are already two events with the same key, discard the snd and rcv
+                        //TODO: what to do if a message is redundant but its handler contains non redundant accesses?
+                        //an handler event can be removed if it empty. Its corresponding RCV
+                        //event can be removed if its removal doesnt lead to new races detected
+                        /*
+                        SocketEvent rcve = (SocketEvent) e;
+                        if(contains2ndTerm(redundantSndRcv, rcve)) {
+                            trace.handlerEvents.get
+                        }
+                        */
+                        break;
                     case LOCK:
                         SyncEvent lockEvent = (SyncEvent) e;
                         SyncEvent unlockEvent = trace.getCorrespondingUnlock(lockEvent);
                         if(unlockEvent != null) {
                             List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-                            if (canRemoveLockBlock(subTrace, toRemove, lockEvent.getVariable())) {
+                            if (canRemoveLockBlock(subTrace /*, toRemove, lockEvent.getVariable() */)) {
                                 toRemove.add(e);
                                 toRemove.add(unlockEvent);
                             }
@@ -308,12 +411,66 @@ public class MinhaCheckerParallel {
                 }
             }
         }
-        Stats.prunedEvents = prunedEvents;
 
+
+        //remove redundant SND/RCV pairs that have redundant handlers
+        for(MyPair<SocketEvent, SocketEvent> pair : redundantSndRcv) {
+            SocketEvent se = (SocketEvent) pair.getFirst();
+            SocketEvent rcve = (SocketEvent) pair.getSecond();
+
+            String thread = rcve.getThread();
+            List<Event> list = trace.handlerEvents.get(rcve);
+            System.out.println("~~> " + pair);
+
+            System.out.println("LIST: " + list);
+            if(canRemoveHandler(list)) {
+                System.out.println("XXXX");
+                //TODO: ver como posso remover todos os eventos do handler e SND/RCV
+                List<Event> events = trace.eventsPerThread.get(thread);
+                events.removeAll(list);
+                events.remove(rcve);
+                events.remove(se);
+                System.out.println("REMOVED SND: " + se);
+            }
+        }
+
+
+        Stats.prunedEvents = prunedEvents;
     }
 
-    private static boolean canRemoveLockBlock(List<Event> subseq, Set<Event> toRemove, String variable) {
-         for(Event e : subseq.subList(1, subseq.size())) {
+    private static boolean canRemoveHandler(List<Event> handler) {
+        Set<SyncEvent> openLocks = new HashSet<SyncEvent>();
+        for(Event e : handler) {
+            EventType type = e.getType();
+            switch(type) {
+                case SND:
+                case RCV:
+                case READ:
+                case WRITE:
+                case NOTIFY:
+                case NOTIFYALL:
+                case WAIT:
+                case CREATE:
+                    return false;
+                case LOCK:
+                    openLocks.add((SyncEvent) e);
+                    break;
+                case UNLOCK:
+                    if(!openLocks.remove((SyncEvent) e)) {
+                        // tried to unlock a thread open outside the handler
+                        return false;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+        return openLocks.isEmpty();
+    }
+
+    private static boolean canRemoveLockBlock(List<Event> subseq/*, Set<Event> toRemove, String variable */) {
+        //TODO unify this method with the previous (they are very similar)
+        for(Event e : subseq.subList(1, subseq.size())) {
             EventType type = e.getType();
             if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
                 return false;
