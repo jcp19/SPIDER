@@ -98,7 +98,7 @@ public class MinhaCheckerParallel {
                         "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
                     //writeTrace("toCleanTrace.txt");
-                    pruneEvents();
+                    //pruneEvents();
                     //writeTrace("cleanTrace.txt");
                 }
 
@@ -254,31 +254,6 @@ public class MinhaCheckerParallel {
         }
         Stats.redundantEvents = count;
     }
-
-    /*
-    private static void removeEventFromTrace(TraceProcessor trace, Event e) {
-        if(e == null) {
-            return;
-        }
-
-        EventType type = e.getType();
-        String thread = e.getThread();
-
-        List<Event> eventsThread = trace.eventsPerThread.get(thread);
-
-
-        switch(type) {
-            case SND:
-            case RCV:
-            case LOCK:
-            case UNLOCK:
-            case WRITE:
-            case READ:
-            default:
-        }
-
-    }
-    */
 
     private static <X,Y> MyPair<X,Y> getPairWithSameSecondTerm(Collection<MyPair<X,Y>> coll, Y term) {
         if(term == null) {
@@ -491,11 +466,20 @@ public class MinhaCheckerParallel {
         Stats.prunedEvents = redundantEvents.size() - Stats.redundantEvents;
     }
 
+    private static <K,V> boolean removeFromMapToLists(Map<K,List<V>> map, K key, V value) {
+        List<V> l = map.get(key);
+        if(l != null) {
+            return l.remove(value);
+        }
+        return false;
+    }
+
     //Only removes the data associated with this event from the Trace Processor metadata (not from eventsPerThread)
     private static void removeEventMetadata(Event e) {
         if(e == null) {
             return;
         }
+        String var;
         EventType type = e.getType();
         String thread = e.getThread();
         switch(type) {
@@ -514,8 +498,63 @@ public class MinhaCheckerParallel {
                         removeEventMetadata(x);
                     }
                 }
+                break;
+            case CREATE:
+                trace.forkEvents.get(thread).remove(e);
+                break;
+            case JOIN:
+                trace.joinEvents.get(thread).remove(e);
+                break;
+            case LOCK:
+            case UNLOCK:
+                SyncEvent syncEvent = (SyncEvent) e;
+                var = syncEvent.getVariable();
+                List<MyPair<SyncEvent,SyncEvent>> pairs = trace.lockEvents.get(var);
+                if(pairs != null) {
+                    MyPair<SyncEvent, SyncEvent> res = null;
+                    for(MyPair<SyncEvent,SyncEvent> pair : pairs) {
+                        SyncEvent fst = pair.getFirst();
+                        SyncEvent snd = pair.getSecond();
+                        if(syncEvent.equals(fst) || syncEvent.equals(snd)) {
+                            res = pair;
+                            break;
+                        }
+                    }
+
+                    if(res != null) {
+                        pairs.remove(res);
+                    }
+                }
+                break;
+            case READ:
+                RWEvent readEvent = (RWEvent) e;
+                var = readEvent.getVariable();
+                removeFromMapToLists(trace.readEvents, var, readEvent);
+                break;
+            case WRITE:
+                RWEvent writeEvent = (RWEvent) e;
+                var = writeEvent.getVariable();
+                removeFromMapToLists(trace.writeEvents, var, writeEvent);
+                break;
+            case WAIT:
+                SyncEvent waitEvent = (SyncEvent) e;
+                var = waitEvent.getVariable();
+                removeFromMapToLists(trace.waitEvents, var, waitEvent);
+                break;
+            case NOTIFY:
+            case NOTIFYALL:
+                SyncEvent notifyEvent = (SyncEvent) e;
+                var = notifyEvent.getVariable();
+                removeFromMapToLists(trace.notifyEvents, var, notifyEvent);
+                break;
         }
+
         //remove from handlerEvents
+        for(List<Event> l : trace.handlerEvents.getValues()) {
+            if(l.remove(e)) {
+                return;
+            }
+        }
     }
 
     private static boolean canRemoveHandler(List<Event> handler) {
