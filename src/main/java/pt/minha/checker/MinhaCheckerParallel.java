@@ -64,7 +64,6 @@ public class MinhaCheckerParallel {
     }
 
     public static void main(String args[]) {
-
         dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
         msgContexts = new HashMap<String,Integer>();
         msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
@@ -72,7 +71,6 @@ public class MinhaCheckerParallel {
         rcvNextEvent = new HashMap<SocketEvent, Event>();
         redundantSndRcv = new HashSet<MyPair<SocketEvent, SocketEvent>>();
 
-        //DEBUG
         redundantEvents = new HashSet<Event>();
 
         //Redundancy-check related initializations
@@ -168,6 +166,7 @@ public class MinhaCheckerParallel {
         //  the function getStack in ReX depends only on the current state of teta-loc
         long count = 0;
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
+
         //Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) -> stack of pairs SND/RCV
         Map<String, Stack<MyPair<SocketEvent, SocketEvent>>> socketStacks =
                 new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
@@ -204,11 +203,8 @@ public class MinhaCheckerParallel {
                     if(checkRedundancy(rwe, thread)) {
                         //if an event is redundant, remove from the trace
                         events.remove();
-                        //DEBUG info
                         redundantEvents.add(e);
-                        //System.out.println("DEBUG: Removed event " + e.toString());
                         removeEventMetadata(rwe);
-                        //DEL (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     } else {
                         threadCounters.put(thread, threadCounters.get(thread)+1);
@@ -223,7 +219,6 @@ public class MinhaCheckerParallel {
                     SocketEvent rcve = (SocketEvent) e;
                     String messageId = rcve.getMessageId();
                     SocketEvent snde = trace.sndFromMessageId(messageId);
-
                     String key = snde.getLineOfCode() + ":" + countersOnEvents.get(snde) + "::" + rcve.getLineOfCode() +
                             ":" + threadCounters.get(thread);
                     Stack<MyPair<SocketEvent, SocketEvent>> s = socketStacks.get(key);
@@ -234,12 +229,10 @@ public class MinhaCheckerParallel {
                     }
 
                     if(s.size() >= 2) {
-                        //System.out.println("REDUNDANT SEND: " + snde);
                         redundantSndRcv.add(new MyPair<SocketEvent, SocketEvent>(snde,rcve));
                     } else {
                         s.push(trace.msgEvents.get(messageId));
                     }
-
                     break;
                 case CREATE:
                     // handles CREATE events the same way it handles SND
@@ -284,15 +277,10 @@ public class MinhaCheckerParallel {
         //can be optimized to check only once every part of the code
         Set<String> checkedThreads = new HashSet<String>();
         Set<String> threadsToRemove = new HashSet<String>();
-        Set<Event> toRemove;
-
-        redundantEvents = new HashSet<Event>();
-        int prunedEvents = 0;
-
+        Set<Event> prunedEvents = new HashSet<Event>();
 
         for(String thread : trace.eventsPerThread.keySet()) {
             int i = 0;
-            toRemove = new HashSet<Event>();
             if(checkedThreads.contains(thread)) {
                 continue;
             }
@@ -300,103 +288,51 @@ public class MinhaCheckerParallel {
             List<Event> events = trace.eventsPerThread.get(thread);
             for(Event e : events) {
                 EventType type = e.getType();
-                if(toRemove.contains(e)) {
+                if(prunedEvents.contains(e)) {
                     continue;
                 }
                 switch (type) {
-                    //can become faster if we toRemove becomes a map of thread -> events to remove on that
-                    //thread
                     case CREATE:
                         ThreadCreationEvent tce = (ThreadCreationEvent) e;
                         String child = tce.getChildThread();
-                        //adicionar thread criada às consultadas
-                        if(threadsToRemove.contains(child) || canRemoveThread(trace.eventsPerThread.get(child))) {
+
+                        if(canRemoveBlock(trace.eventsPerThread.get(child))) {
                             // marks events to remove instead of removing in order to prevent changes in the
                             // iterated collection
                             ThreadCreationEvent join = trace.getCorrespondingJoin(tce);
-                            toRemove.add(tce);
-                            redundantEvents.add(tce);
-                            redundantEvents.addAll(trace.eventsPerThread.get(child));
+                            prunedEvents.add(tce);
+                            prunedEvents.addAll(trace.eventsPerThread.get(child));
                             checkedThreads.add(child);
                             threadsToRemove.add(child);
 
-                            //remove events from corresponding data structures
-                            //trace.forkEvents.get(thread).remove(tce);
-                            prunedEvents += 1;
-
-                            List<ThreadCreationEvent> joins = trace.joinEvents.get(thread);
-                            if(joins != null) {
-                                toRemove.add(join);
-                                redundantEvents.add(join);
-                                joins.remove(join);
-                                prunedEvents += 1;
+                            if(join != null) {
+                                prunedEvents.add(join);
                             }
                         }
                         break;
 
-                    //TODO - handler begin
-                    case HNDLBEG:
-
-                        break;
                     case RCV:
                         List<Event> handler = trace.handlerEvents.get(e);
                         MyPair<SocketEvent, SocketEvent> pair = getPairWithSameSecondTerm(redundantSndRcv, (SocketEvent) e);
 
                         //if the send/rcv is redundant and there is no message handler
                         if(handler == null && pair != null) {
-                            toRemove.add(pair.getFirst());
-                            toRemove.add(pair.getSecond());
-                            trace.handlerEvents.remove(e);
-
-                            redundantEvents.add(pair.getFirst());
-                            redundantEvents.add(pair.getSecond());
+                            removeEventMetadata(e);
+                            prunedEvents.add(pair.getFirst());
+                            prunedEvents.add(pair.getSecond());
 
                             redundantSndRcv.remove(pair);
-                            System.out.println("REMOVED PAIR: " + pair);
                         }
-
-
-                        //Steps:
-                        //- get position of both snd and rcvs
-                        //- concatenate with both counters from threads
-                        //- if there are already two events with the same key, discard the snd and rcv
-                        //TODO: what to do if a message is redundant but its handler contains non redundant accesses?
-                        //an handler event can be removed if it empty. Its corresponding RCV
-                        //event can be removed if its removal doesnt lead to new races detected
-                        /*
-                        SocketEvent rcve = (SocketEvent) e;
-                        if(contains2ndTerm(redundantSndRcv, rcve)) {
-                            trace.handlerEvents.get
-                        }
-                        */
                         break;
                     case LOCK:
                         SyncEvent lockEvent = (SyncEvent) e;
                         SyncEvent unlockEvent = trace.getCorrespondingUnlock(lockEvent);
+
                         if(unlockEvent != null) {
                             List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-                            if (canRemoveLockBlock(subTrace /*, toRemove, lockEvent.getVariable() */)) {
-                                redundantEvents.add(e);
-                                redundantEvents.add(unlockEvent);
-
-                                toRemove.add(e);
-                                toRemove.add(unlockEvent);
-
-
-                                /*
-                                MyPair<SyncEvent, SyncEvent> delete = null;
-                                SyncEvent se = (SyncEvent) e;
-                                List<MyPair<SyncEvent,SyncEvent>> lockEvents = trace.lockEvents.get(se.getVariable());
-                                for(MyPair<SyncEvent, SyncEvent> s : lockEvents) {
-                                    if(s.getFirst().equals(se)) {
-                                        delete = s;
-                                        break;
-                                    }
-                                }
-                                lockEvents.remove(delete);
-                                */
-                                //removeEventMetadata(e);
-                                //removeEventMetadata(unlockEvent);
+                            if (canRemoveBlock(subTrace)) {
+                                prunedEvents.add(e);
+                                prunedEvents.add(unlockEvent);
                             }
                         }
                         break;
@@ -405,72 +341,14 @@ public class MinhaCheckerParallel {
                 }
                 i++;
             }
-            //TODO: remove events from other data structures
             checkedThreads.add(thread);
-            System.out.println("To Remove: " + toRemove);
-            events.removeAll(toRemove);
+            //System.out.println("To Remove: " + toRemove);
         }
 
-
-        for(Event e : redundantEvents) {
+        for(Event e : prunedEvents) {
             removeEventMetadata(e);
+            trace.eventsPerThread.get(e.getThread()).remove(e);
         }
-
-        /*
-        // Cleaning of data structures
-        for(String thread : threadsToRemove) {
-            List<Event> events = trace.eventsPerThread.remove(thread);
-            System.out.println("Removed Events ==> " + events);
-            prunedEvents += events.size();
-            for (Event e : events) {
-                if (e == null) {
-                    continue;
-                }
-                String t = e.getThread();
-                List<Event> l = trace.eventsPerThread.get(t);
-                if (l != null) {
-                    l.remove(e);
-                }
-
-                removeEventMetadata(e);
-                System.out.println("Aqui!!");
-            }
-
-        } // to comment
-        */
-
-            /*
-            trace.forkEvents.remove(thread);
-            trace.joinEvents.remove(thread);
-            for(Event e : events) {
-                EventType type = e.getType();
-                String t = e.getThread();
-                switch(type) {
-                    case LOCK:
-                        //removes both lock and unlock
-                        MyPair<SyncEvent, SyncEvent> delete = null;
-                        SyncEvent se = (SyncEvent) e;
-                        List<MyPair<SyncEvent,SyncEvent>> lockEvents = trace.lockEvents.get(se.getVariable());
-                        for(MyPair<SyncEvent, SyncEvent> s : lockEvents) {
-                            if(s.getFirst().equals(se)) {
-                                delete = s;
-                                break;
-                            }
-                        }
-                        lockEvents.remove(delete);
-                        break;
-                    case CREATE:
-                        ThreadCreationEvent tce = (ThreadCreationEvent) e;
-                        ThreadCreationEvent join = trace.getCorrespondingJoin(tce);
-                        //remove events from corresponding data structures
-                        trace.forkEvents.get(t).remove(tce);
-                        trace.joinEvents.get(t).remove(join);
-                        break;
-                }
-            }
-            */
-        //} // to uncomment
-
 
         //remove redundant SND/RCV pairs that have redundant handlers
         for(MyPair<SocketEvent, SocketEvent> pair : redundantSndRcv) {
@@ -479,25 +357,23 @@ public class MinhaCheckerParallel {
 
             String thread = rcve.getThread();
             List<Event> list = trace.handlerEvents.get(rcve);
-            System.out.println("~~> " + pair);
-
-            System.out.println("LIST: " + list);
+            //System.out.println("~~> " + pair);
+            //System.out.println("LIST: " + list);
             if(canRemoveHandler(list)) {
-                //TODO: ver como posso remover todos os eventos do handler e SND/RCV
                 List<Event> events = trace.eventsPerThread.get(thread);
                 events.removeAll(list);
                 events.remove(rcve);
                 events.remove(se);
-                trace.handlerEvents.remove(pair.getSecond());
-                trace.msgEvents.remove(pair.getFirst().getMessageId());
+                removeEventMetadata(rcve);
+                removeEventMetadata(se);
 
-                System.out.println("REMOVED SND: " + se);
+                //trace.handlerEvents.remove(pair.getSecond());
+                //trace.msgEvents.remove(pair.getFirst().getMessageId());
+                //System.out.println("REMOVED SND: " + se);
             }
         }
 
-
-        //Stats.prunedEvents = redundantEvents.size() - Stats.redundantEvents;
-        Stats.prunedEvents = redundantEvents.size();
+        Stats.prunedEvents = prunedEvents.size();
     }
 
     private static <K,V> boolean removeFromMapToLists(Map<K,List<V>> map, K key, V value) {
@@ -526,7 +402,7 @@ public class MinhaCheckerParallel {
             case RCV:
                 //remove msg handler
                 SocketEvent rcvEvent = (SocketEvent)  e;
-                List<Event> handler = trace.handlerEvents.get(rcvEvent);
+                List<Event> handler = trace.handlerEvents.remove(rcvEvent);
                 if(handler != null) {
                     for(Event x : handler) {
                         removeEventMetadata(x);
@@ -583,7 +459,6 @@ public class MinhaCheckerParallel {
                 break;
         }
 
-        //remove from handlerEvents
         for(List<Event> l : trace.handlerEvents.values()) {
             if(l.remove(e)) {
                 return;
@@ -624,36 +499,14 @@ public class MinhaCheckerParallel {
         return openLocks.isEmpty();
     }
 
-    private static boolean canRemoveLockBlock(List<Event> subseq/*, Set<Event> toRemove, String variable */) {
-        //TODO unify this method with the previous (they are very similar)
-        for(Event e : subseq.subList(1, subseq.size())) {
-            EventType type = e.getType();
-            if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
-                return false;
-            } else if(type == CREATE) {
-                ThreadCreationEvent tce = (ThreadCreationEvent) e;
-                if(!canRemoveThread(trace.eventsPerThread.get(tce.getChildThread()))) {
-                    return false;
-                }
-            }
-            /* else if(type == LOCK) {
-                if(((SyncEvent) e).getVariable().equals(variable)) {
-                    //if the lock is reentrant
-                    toRemove.add(e);
-                }
-            } */
-        }
-        return true;
-    }
-
-    private static boolean canRemoveThread(List<Event> events) {
+    private static boolean canRemoveBlock(List<Event> events) {
         for(Event e : events) {
             EventType type = e.getType();
             if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
                 return false;
             } else if(type == CREATE) {
                 ThreadCreationEvent tce = (ThreadCreationEvent) e;
-                if(!canRemoveThread(trace.eventsPerThread.get(tce.getChildThread()))) {
+                if(!canRemoveBlock(trace.eventsPerThread.get(tce.getChildThread()))) {
                     return false;
                 }
             }
