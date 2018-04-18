@@ -98,7 +98,7 @@ public class MinhaCheckerParallel {
                         "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
                     //writeTrace("toCleanTrace.txt");
-                    //pruneEvents();
+                    pruneEvents();
                     //writeTrace("cleanTrace.txt");
                 }
 
@@ -207,7 +207,8 @@ public class MinhaCheckerParallel {
                         //DEBUG info
                         redundantEvents.add(e);
                         //System.out.println("DEBUG: Removed event " + e.toString());
-                        (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
+                        removeEventMetadata(rwe);
+                        //DEL (type == READ? trace.readEvents : trace.writeEvents).get(rwe.getVariable()).remove(rwe);
                         count++;
                     } else {
                         threadCounters.put(thread, threadCounters.get(thread)+1);
@@ -284,6 +285,8 @@ public class MinhaCheckerParallel {
         Set<String> checkedThreads = new HashSet<String>();
         Set<String> threadsToRemove = new HashSet<String>();
         Set<Event> toRemove;
+
+        redundantEvents = new HashSet<Event>();
         int prunedEvents = 0;
 
 
@@ -318,7 +321,7 @@ public class MinhaCheckerParallel {
                             threadsToRemove.add(child);
 
                             //remove events from corresponding data structures
-                            trace.forkEvents.get(thread).remove(tce);
+                            //trace.forkEvents.get(thread).remove(tce);
                             prunedEvents += 1;
 
                             List<ThreadCreationEvent> joins = trace.joinEvents.get(thread);
@@ -379,16 +382,21 @@ public class MinhaCheckerParallel {
                                 toRemove.add(e);
                                 toRemove.add(unlockEvent);
 
+
+                                /*
                                 MyPair<SyncEvent, SyncEvent> delete = null;
-                    SyncEvent se = (SyncEvent) e;
-                    List<MyPair<SyncEvent,SyncEvent>> lockEvents = trace.lockEvents.get(se.getVariable());
-                    for(MyPair<SyncEvent, SyncEvent> s : lockEvents) {
-                        if(s.getFirst().equals(se)) {
-                            delete = s;
-                            break;
-                        }
-                    }
-                    lockEvents.remove(delete);
+                                SyncEvent se = (SyncEvent) e;
+                                List<MyPair<SyncEvent,SyncEvent>> lockEvents = trace.lockEvents.get(se.getVariable());
+                                for(MyPair<SyncEvent, SyncEvent> s : lockEvents) {
+                                    if(s.getFirst().equals(se)) {
+                                        delete = s;
+                                        break;
+                                    }
+                                }
+                                lockEvents.remove(delete);
+                                */
+                                //removeEventMetadata(e);
+                                //removeEventMetadata(unlockEvent);
                             }
                         }
                         break;
@@ -403,11 +411,35 @@ public class MinhaCheckerParallel {
             events.removeAll(toRemove);
         }
 
+
+        for(Event e : redundantEvents) {
+            removeEventMetadata(e);
+        }
+
+        /*
         // Cleaning of data structures
         for(String thread : threadsToRemove) {
             List<Event> events = trace.eventsPerThread.remove(thread);
             System.out.println("Removed Events ==> " + events);
             prunedEvents += events.size();
+            for (Event e : events) {
+                if (e == null) {
+                    continue;
+                }
+                String t = e.getThread();
+                List<Event> l = trace.eventsPerThread.get(t);
+                if (l != null) {
+                    l.remove(e);
+                }
+
+                removeEventMetadata(e);
+                System.out.println("Aqui!!");
+            }
+
+        } // to comment
+        */
+
+            /*
             trace.forkEvents.remove(thread);
             trace.joinEvents.remove(thread);
             for(Event e : events) {
@@ -436,7 +468,8 @@ public class MinhaCheckerParallel {
                         break;
                 }
             }
-        }
+            */
+        //} // to uncomment
 
 
         //remove redundant SND/RCV pairs that have redundant handlers
@@ -463,7 +496,8 @@ public class MinhaCheckerParallel {
         }
 
 
-        Stats.prunedEvents = redundantEvents.size() - Stats.redundantEvents;
+        //Stats.prunedEvents = redundantEvents.size() - Stats.redundantEvents;
+        Stats.prunedEvents = redundantEvents.size();
     }
 
     private static <K,V> boolean removeFromMapToLists(Map<K,List<V>> map, K key, V value) {
@@ -550,7 +584,7 @@ public class MinhaCheckerParallel {
         }
 
         //remove from handlerEvents
-        for(List<Event> l : trace.handlerEvents.getValues()) {
+        for(List<Event> l : trace.handlerEvents.values()) {
             if(l.remove(e)) {
                 return;
             }
