@@ -316,10 +316,11 @@ public class MinhaCheckerParallel {
                         MyPair<SocketEvent, SocketEvent> pair = getPairWithSameSecondTerm(redundantSndRcv, (SocketEvent) e);
 
                         //if the send/rcv is redundant and there is no message handler
+
                         if(handler == null && pair != null) {
-                            removeEventMetadata(e);
-                            prunedEvents.add(pair.getFirst());
-                            prunedEvents.add(pair.getSecond());
+//                            removeEventMetadata(e);
+//                            prunedEvents.add(pair.getFirst());
+//                            prunedEvents.add(pair.getSecond());
 
                             redundantSndRcv.remove(pair);
                         }
@@ -342,11 +343,11 @@ public class MinhaCheckerParallel {
                 i++;
             }
             checkedThreads.add(thread);
-            //System.out.println("To Remove: " + toRemove);
         }
 
         for(Event e : prunedEvents) {
             removeEventMetadata(e);
+            System.out.println("To Remove: " + e);
             trace.eventsPerThread.get(e.getThread()).remove(e);
         }
 
@@ -361,6 +362,10 @@ public class MinhaCheckerParallel {
             //System.out.println("LIST: " + list);
             if(canRemoveHandler(list)) {
                 List<Event> events = trace.eventsPerThread.get(thread);
+                prunedEvents.addAll(list);
+                prunedEvents.add(rcve);
+                prunedEvents.add(se);
+
                 events.removeAll(list);
                 events.remove(rcve);
                 events.remove(se);
