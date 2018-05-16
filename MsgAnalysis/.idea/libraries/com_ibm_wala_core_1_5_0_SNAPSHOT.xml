@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="com.ibm.wala.core-1.5.0-SNAPSHOT">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../../../WALA/com.ibm.wala.core/target/com.ibm.wala.core-1.5.0-SNAPSHOT.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
