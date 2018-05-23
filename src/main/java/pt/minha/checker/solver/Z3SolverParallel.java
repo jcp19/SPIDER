@@ -1,5 +1,6 @@
 package pt.minha.checker.solver;
 
+import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.events.*;
 import pt.minha.checker.stats.Stats;
 
@@ -21,7 +22,7 @@ public class Z3SolverParallel implements Solver {
     private static Process[] z3Processes;
     private static BufferedReader[] readers;
     private static BufferedWriter[] writers;
-    private ConcurrentHashMap<Integer,MyPair<? extends Event,? extends Event>> racesFound;
+    private ConcurrentHashMap<Integer,CausalPair<? extends Event,? extends Event>> racesFound;
 
     private Z3SolverParallel(){}
 
@@ -83,12 +84,12 @@ public class Z3SolverParallel implements Solver {
     }
 
 
-    public HashSet<MyPair<? extends Event, ? extends  Event>> checkRacesParallel(HashSet<MyPair<? extends Event, ? extends Event>> candidates)
+    public HashSet<CausalPair<? extends Event, ? extends  Event>> checkRacesParallel( HashSet<CausalPair<? extends Event, ? extends Event>> candidates)
     {
         try {
-            racesFound = new ConcurrentHashMap<Integer,MyPair<? extends Event, ? extends Event>>();
+            racesFound = new ConcurrentHashMap<Integer,CausalPair<? extends Event, ? extends Event>>();
             int batchsize = candidates.size() / CORES;
-            List<MyPair<? extends Event, ? extends Event>> candidatesList = new ArrayList<MyPair<? extends Event, ? extends Event>>(candidates);
+            List<CausalPair<? extends Event, ? extends Event>> candidatesList = new ArrayList<CausalPair<? extends Event, ? extends Event>>(candidates);
             WorkerZ3[] workers = new WorkerZ3[CORES];
             int start = 0;
             int end;
@@ -112,7 +113,7 @@ public class Z3SolverParallel implements Solver {
             e.printStackTrace();
         }
         finally {
-            return  new HashSet<MyPair<? extends Event,? extends Event>>(racesFound.values());
+            return  new HashSet<CausalPair<? extends Event,? extends Event>>(racesFound.values());
         }
     }
 
@@ -248,9 +249,9 @@ public class Z3SolverParallel implements Solver {
         private int id;
         private int startPos;
         private int endPos;
-        List<MyPair<? extends Event,? extends Event>> candidates;
+        List<CausalPair<? extends Event,? extends Event>> candidates;
 
-        public WorkerZ3(int tid, int start, int end, List<MyPair<? extends Event,? extends Event>> candidatePairs) throws IOException{
+        public WorkerZ3(int tid, int start, int end, List<CausalPair<? extends Event,? extends Event>> candidatePairs) throws IOException{
             id = tid;
             startPos = start;
             endPos = end;
@@ -264,7 +265,7 @@ public class Z3SolverParallel implements Solver {
 
                 //check data races for a portion of the list
                 for(int i = startPos; i < endPos; i++){
-                    MyPair<? extends Event,? extends Event> candidate = candidates.get(i);
+                    CausalPair<? extends Event,? extends Event> candidate = candidates.get(i);
                     boolean isMsgRace = (candidate.getFirst() instanceof SocketEvent);
                     boolean isConflict = checkRace(candidate.getFirst().toString(), candidate.getSecond().toString(), isMsgRace);
                     if (isConflict) {

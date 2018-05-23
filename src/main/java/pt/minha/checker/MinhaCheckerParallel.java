@@ -2,6 +2,8 @@ package pt.minha.checker;
 
 import com.sun.corba.se.impl.orbutil.concurrent.Sync;
 import pt.haslab.taz.TraceProcessor;
+import pt.haslab.taz.causality.CausalPair;
+import pt.haslab.taz.causality.SocketCausalPair;
 import pt.haslab.taz.events.*;
 import pt.haslab.taz.utils.Utils;
 import static pt.haslab.taz.events.EventType.*;
@@ -25,9 +27,9 @@ public class MinhaCheckerParallel {
     public static TraceProcessor trace;
 
     //data structures
-    public static HashSet<MyPair<? extends Event,? extends Event>> dataRaceCandidates;
-    public static HashSet<MyPair<? extends Event,? extends Event>> msgRaceCandidates;
-    public static HashSet<MyPair<SocketEvent, SocketEvent>> redundantSndRcv;
+    public static HashSet<CausalPair<? extends Event,? extends Event>> dataRaceCandidates;
+    public static HashSet<CausalPair<? extends Event,? extends Event>> msgRaceCandidates;
+    public static HashSet<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
 
     //HB model
     //used to encode message arrival constraints
@@ -48,7 +50,7 @@ public class MinhaCheckerParallel {
     public static Map<String, Stack<String>> stacks;
 
     //Map: str(location pair),hashCode(TETAthread)-> stack of
-    public static Map<String, Stack<MyPair<SocketEvent, SocketEvent>>> msgStacks;
+    public static Map<String, Stack<CausalPair<SocketEvent, SocketEvent>>> msgStacks;
 
     //solver stuff
     public static Solver solver;
@@ -58,18 +60,18 @@ public class MinhaCheckerParallel {
         System.out.println(">>>>>>>>>>>");
         while (events.hasNext()) {
             Event e = events.next();
-            System.out.println(e.getEventNumber() + " :: " + e.toString());
+            System.out.println(e.getEventId() + " :: " + e.toString());
         }
         System.out.println(">>>>>>>>>>>");
     }
 
     public static void main(String args[]) {
-        dataRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
+        dataRaceCandidates = new HashSet<CausalPair<? extends Event, ? extends Event>>();
         msgContexts = new HashMap<String,Integer>();
-        msgRaceCandidates = new HashSet<MyPair<? extends Event, ? extends Event>>();
-        msgStacks = new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
+        msgRaceCandidates = new HashSet<CausalPair<? extends Event, ? extends Event>>();
+        msgStacks = new HashMap<String, Stack<CausalPair<SocketEvent, SocketEvent>>>();
         rcvNextEvent = new HashMap<SocketEvent, Event>();
-        redundantSndRcv = new HashSet<MyPair<SocketEvent, SocketEvent>>();
+        redundantSndRcv = new HashSet<CausalPair<SocketEvent, SocketEvent>>();
 
         redundantEvents = new HashSet<Event>();
 
@@ -91,9 +93,12 @@ public class MinhaCheckerParallel {
                 trace.loadEventTrace(traceFile);
                 Stats.numEventsTrace = trace.getNumberOfEvents();
 
+                //aggregate partitioned messages to facilitate message race detection
+                trace.aggregateAllPartitionedMessages();
+
                 //remove redundant events
                 if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
-                        "true".equals(props.getProperty("redundancy-elimination"))) {
+                                "true".equals(props.getProperty("redundancy-elimination"))) {
                     removeRedundantEvents();
                     //writeTrace("toCleanTrace.txt");
                     pruneEvents();
@@ -168,8 +173,8 @@ public class MinhaCheckerParallel {
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
 
         //Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) -> stack of pairs SND/RCV
-        Map<String, Stack<MyPair<SocketEvent, SocketEvent>>> socketStacks =
-                new HashMap<String, Stack<MyPair<SocketEvent, SocketEvent>>>();
+        Map<String, Stack<SocketCausalPair>> socketStacks =
+                        new HashMap<String, Stack<SocketCausalPair>>();
 
         // Records for each SND event its corresponding thread counter
         Map<Event, Integer> countersOnEvents = new HashMap<Event, Integer>();
@@ -220,16 +225,16 @@ public class MinhaCheckerParallel {
                     String messageId = rcve.getMessageId();
                     SocketEvent snde = trace.sndFromMessageId(messageId);
                     String key = snde.getLineOfCode() + ":" + countersOnEvents.get(snde) + "::" + rcve.getLineOfCode() +
-                            ":" + threadCounters.get(thread);
-                    Stack<MyPair<SocketEvent, SocketEvent>> s = socketStacks.get(key);
+                                    ":" + threadCounters.get(thread);
+                    Stack<SocketCausalPair> s = socketStacks.get(key);
 
                     if(s == null) {
-                        s = new Stack<MyPair<SocketEvent, SocketEvent>>();
+                        s = new Stack<SocketCausalPair>();
                         socketStacks.put(key, s);
                     }
 
                     if(s.size() >= 2) {
-                        redundantSndRcv.add(new MyPair<SocketEvent, SocketEvent>(snde,rcve));
+                        redundantSndRcv.add(new CausalPair<SocketEvent, SocketEvent>(snde,rcve));
                     } else {
                         s.push(trace.msgEvents.get(messageId));
                     }
@@ -243,15 +248,15 @@ public class MinhaCheckerParallel {
                     // advance e
                     break;
             }
-            System.out.println("-- Event " + e.getEventNumber() + " : " + e.toString());
+            System.out.println("-- Event " + e.getEventId() + " : " + e.toString());
             //printDebugInfo();
         }
         Stats.redundantEvents = count;
     }
 
-    private static <X,Y> MyPair<X,Y> getPairWithSameSecondTerm(Collection<MyPair<X,Y>> coll, Y term) {
+    private static <X,Y> CausalPair<X,Y> getPairWithSameSecondTerm(Collection<CausalPair<X,Y>> coll, Y term) {
         if(term == null) {
-            for(MyPair<X,Y> pair : coll) {
+            for(CausalPair<X,Y> pair : coll) {
                 Y snd = pair.getSecond();
                 if(snd == null)
                     return pair;
@@ -259,7 +264,7 @@ public class MinhaCheckerParallel {
             return null;
         }
 
-        for(MyPair<X,Y> pair : coll) {
+        for(CausalPair<X,Y> pair : coll) {
             Y snd = pair.getSecond();
             if(term.equals(snd)) {
                 return pair;
@@ -269,7 +274,7 @@ public class MinhaCheckerParallel {
         return null;
     }
 
-    private static <X,Y> boolean contains2ndTerm(Collection<MyPair<X,Y>> coll, Y elem) {
+    private static <X,Y> boolean contains2ndTerm(Collection<CausalPair<X,Y>> coll, Y elem) {
         return getPairWithSameSecondTerm(coll, elem) != null;
     }
 
@@ -313,14 +318,14 @@ public class MinhaCheckerParallel {
 
                     case RCV:
                         List<Event> handler = trace.handlerEvents.get(e);
-                        MyPair<SocketEvent, SocketEvent> pair = getPairWithSameSecondTerm(redundantSndRcv, (SocketEvent) e);
+                        CausalPair<SocketEvent, SocketEvent> pair = getPairWithSameSecondTerm(redundantSndRcv, (SocketEvent) e);
 
                         //if the send/rcv is redundant and there is no message handler
 
                         if(handler == null && pair != null) {
-//                            removeEventMetadata(e);
-//                            prunedEvents.add(pair.getFirst());
-//                            prunedEvents.add(pair.getSecond());
+                            //                            removeEventMetadata(e);
+                            //                            prunedEvents.add(pair.getFirst());
+                            //                            prunedEvents.add(pair.getSecond());
 
                             redundantSndRcv.remove(pair);
                         }
@@ -352,7 +357,7 @@ public class MinhaCheckerParallel {
         }
 
         //remove redundant SND/RCV pairs that have redundant handlers
-        for(MyPair<SocketEvent, SocketEvent> pair : redundantSndRcv) {
+        for(CausalPair<SocketEvent, SocketEvent> pair : redundantSndRcv) {
             SocketEvent se = (SocketEvent) pair.getFirst();
             SocketEvent rcve = (SocketEvent) pair.getSecond();
 
@@ -424,10 +429,10 @@ public class MinhaCheckerParallel {
             case UNLOCK:
                 SyncEvent syncEvent = (SyncEvent) e;
                 var = syncEvent.getVariable();
-                List<MyPair<SyncEvent,SyncEvent>> pairs = trace.lockEvents.get(var);
+                List<CausalPair<SyncEvent,SyncEvent>> pairs = trace.lockEvents.get(var);
                 if(pairs != null) {
-                    MyPair<SyncEvent, SyncEvent> res = null;
-                    for(MyPair<SyncEvent,SyncEvent> pair : pairs) {
+                    CausalPair<SyncEvent, SyncEvent> res = null;
+                    for(CausalPair<SyncEvent,SyncEvent> pair : pairs) {
                         SyncEvent fst = pair.getFirst();
                         SyncEvent snd = pair.getSecond();
                         if(syncEvent.equals(fst) || syncEvent.equals(snd)) {
@@ -555,7 +560,7 @@ public class MinhaCheckerParallel {
                 //pair with all other writes
                 for (RWEvent w2 : trace.writeEvents.get(var)) {
                     if (w1.conflictsWith(w2)) {
-                        MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, w2);
+                        CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<RWEvent, RWEvent>(w1, w2);
                         if (!dataRaceCandidates.contains(tmpPair)) {
                             dataRaceCandidates.add(tmpPair);
                         }
@@ -565,7 +570,7 @@ public class MinhaCheckerParallel {
                 //pair with all other reads
                 if(trace.readEvents.containsKey(var)) {
                     for (RWEvent r2 : trace.readEvents.get(var)) {
-                        MyPair<RWEvent, RWEvent> tmpPair = new MyPair<RWEvent, RWEvent>(w1, r2);
+                        CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<RWEvent, RWEvent>(w1, r2);
                         if (w1.conflictsWith(r2) && !dataRaceCandidates.contains(tmpPair)) {
                             dataRaceCandidates.add(tmpPair);
                         }
@@ -576,7 +581,7 @@ public class MinhaCheckerParallel {
 
         //DEBUG: print candidate pairs
         System.out.println("Data Race candidates: ");
-        for(MyPair<? extends Event,? extends Event> pair : dataRaceCandidates){
+        for(CausalPair<? extends Event,? extends Event> pair : dataRaceCandidates){
             System.out.println("\t"+orderedToString(pair));
         }//*/
     }
@@ -586,13 +591,14 @@ public class MinhaCheckerParallel {
         // a pair of RCV operations is a candidate if:
         // a) both occur at the same node
         // b) are either from different threads of from different message handlers in the same thread
-        List<MyPair<SocketEvent, SocketEvent>> list = new ArrayList<MyPair<SocketEvent, SocketEvent>>(trace.msgEvents.values());
-        ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_i = list.listIterator(0);
-        ListIterator<MyPair<SocketEvent, SocketEvent>> pairIterator_j;
+        List<SocketCausalPair> list = new ArrayList<SocketCausalPair>( trace.msgEvents.values());
+        ListIterator<SocketCausalPair> pairIterator_i = list.listIterator(0);
+        ListIterator<SocketCausalPair> pairIterator_j;
 
         solver.writeComment("SOCKET CHANNEL CONSTRAINTS");
         while(pairIterator_i.hasNext()){
-            SocketEvent rcv1 = pairIterator_i.next().getSecond();
+            SocketEvent rcv1 = pairIterator_i.next().getRcv();
+
             if(rcv1 == null)
                 continue;
 
@@ -600,33 +606,33 @@ public class MinhaCheckerParallel {
             pairIterator_j = list.listIterator(pairIterator_i.nextIndex());
 
             while(pairIterator_j.hasNext()){
-                SocketEvent rcv2 = pairIterator_j.next().getSecond();
+                SocketEvent rcv2 = pairIterator_j.next().getRcv();
                 if(rcv2 == null)
                     continue;
 
                 if(rcv1.conflictsWith(rcv2)){
                     //make a pair with SND events because
                     //two messages a and b are racing if RCVa || SNDb
-                    SocketEvent snd1 = trace.msgEvents.get(rcv1.getMessageId()).getFirst();
-                    SocketEvent snd2 = trace.msgEvents.get(rcv2.getMessageId()).getFirst();
-                    MyPair<SocketEvent,SocketEvent> raceCandidate;
+                    SocketEvent snd1 = trace.msgEvents.get(rcv1.getMessageId()).getSnd();
+                    SocketEvent snd2 = trace.msgEvents.get(rcv2.getMessageId()).getSnd();
+                    CausalPair<SocketEvent,SocketEvent> raceCandidate;
 
-                    if(rcv1.getEventNumber() < rcv2.getEventNumber())
-                        raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd2,rcv1);
+                    if(rcv1.getEventId() < rcv2.getEventId())
+                        raceCandidate = new CausalPair<SocketEvent, SocketEvent>(snd2,rcv1);
                     else
-                        raceCandidate = new MyPair<SocketEvent, SocketEvent>(snd1,rcv2);
+                        raceCandidate = new CausalPair<SocketEvent, SocketEvent>(snd1,rcv2);
                     msgRaceCandidates.add(raceCandidate);
 
                     //if socket channel is TCP and SNDs are from the same thread,
                     // then add constraint stating that RCV1 happens before SND2
                     if(snd1.getSocketType() == SocketEvent.SocketType.TCP
-                            && snd2.getSocketType() == SocketEvent.SocketType.TCP
-                            && snd1.getThread().equals(snd2.getThread())){
+                                    && snd2.getSocketType() == SocketEvent.SocketType.TCP
+                                    && snd1.getThread().equals(snd2.getThread())){
 
                         String cnst;
                         //check trace order of SND, as the iterator does not traverse the events
                         //according to the program order
-                        if(snd1.getEventNumber() < snd2.getEventNumber())
+                        if(snd1.getEventId() < snd2.getEventId())
                             cnst = solver.cLt(rcv1.toString(), snd2.toString());
                         else
                             cnst = solver.cLt(rcv2.toString(), snd1.toString());
@@ -638,7 +644,7 @@ public class MinhaCheckerParallel {
 
         //DEBUG: print candidate pairs
         System.out.println("Message Race candidates: ");
-        for(MyPair<? extends Event,? extends Event> pair : msgRaceCandidates){
+        for(CausalPair<? extends Event,? extends Event> pair : msgRaceCandidates){
             System.out.println("\t"+orderedToString(pair));
         }//*/
     }
@@ -661,7 +667,7 @@ public class MinhaCheckerParallel {
         prettyPrintDataRaces();
     }
 
-    static String orderedToString(MyPair<? extends Event,? extends Event> pair) {
+    static String orderedToString(CausalPair<? extends Event,? extends Event> pair) {
         String fst = pair.getFirst() != null ? pair.getFirst().toString() : " ";
         String snd = pair.getSecond() != null ? pair.getSecond().toString() : " ";
         if(fst.compareTo(snd) < 0) {
@@ -692,20 +698,19 @@ public class MinhaCheckerParallel {
 
 
     public static void prettyPrintDataRaces(){
-        for(MyPair<? extends Event,? extends Event> race : dataRaceCandidates){
+        for(CausalPair<? extends Event,? extends Event> race : dataRaceCandidates){
             System.out.println("-- "+ orderedToString(race));
         }
     }
 
     public static void prettyPrintMessageRaces(){
-        for(MyPair<? extends Event, ? extends Event> conf : msgRaceCandidates){
+        for(CausalPair<? extends Event, ? extends Event> conf : msgRaceCandidates){
             //translate SND events to their respective RCV events
             SocketEvent snd1 = (SocketEvent) conf.getFirst();
             SocketEvent snd2 = (SocketEvent) conf.getSecond();
-            //TODO: double check if this covers all cases of partitioned messages
-            SocketEvent rcv1 = trace.msgEvents.containsKey(snd1.getMessageId()) ? trace.msgEvents.get(snd1.getMessageId()).getSecond() : trace.msgEvents.get(snd1.getMessageId()+".0").getSecond();
-            SocketEvent rcv2 = trace.msgEvents.containsKey(snd2.getMessageId()) ? trace.msgEvents.get(snd2.getMessageId()).getSecond() : trace.msgEvents.get(snd2.getMessageId()+".0").getSecond();
-            MyPair<SocketEvent, SocketEvent> rcv_conf = new MyPair<SocketEvent, SocketEvent>(rcv1, rcv2);
+            SocketEvent rcv1 = trace.msgEvents.get(snd1.getMessageId()).getRcv();
+            SocketEvent rcv2 = trace.msgEvents.get(snd2.getMessageId()).getRcv();
+            CausalPair<SocketEvent, SocketEvent> rcv_conf = new CausalPair<SocketEvent, SocketEvent>(rcv1, rcv2);
             System.out.println("~~ "+orderedToString(rcv_conf));
 
             //compute read-write sets for each message handler
@@ -730,7 +735,7 @@ public class MinhaCheckerParallel {
                 for(RWEvent e1 : readWriteSet1){
                     for(RWEvent e2 : readWriteSet2){
                         if(e1.conflictsWith(e2)){
-                            MyPair<RWEvent, RWEvent> race = new MyPair<RWEvent, RWEvent>(e1, e2);
+                            CausalPair<RWEvent, RWEvent> race = new CausalPair<RWEvent, RWEvent>(e1, e2);
                             System.out.println("\t-- conflict "+ orderedToString(race));
                         }
                     }
@@ -760,10 +765,10 @@ public class MinhaCheckerParallel {
         genMessageHandlingConstraints();
     }
 
-        /**
-         * Builds the order constraints within a segment and returns the position in the trace in which the handler ends
-         * @return
-         */
+    /**
+     * Builds the order constraints within a segment and returns the position in the trace in which the handler ends
+     * @return
+     */
     public static int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException{
 
         //constraint representing the HB relation for the thread's segment
@@ -782,8 +787,8 @@ public class MinhaCheckerParallel {
 
             //handle partial order within message handler
             if (e.getType() == EventType.RCV &&
-                    segmentIt < (events.size() - 1) &&
-                    events.get(segmentIt + 1).getType() == EventType.HNDLBEG) {
+                            segmentIt < (events.size() - 1) &&
+                            events.get(segmentIt + 1).getType() == EventType.HNDLBEG) {
                 segmentIt = genSegmentOrderConstraints(events, segmentIt + 1);
 
                 //store event next to RCV to later encode the message arrival order
@@ -820,7 +825,7 @@ public class MinhaCheckerParallel {
 
             if (events.isEmpty())
                 continue;
-            //if there's only one event, we just need to declare it as there are no program order constraints
+                //if there's only one event, we just need to declare it as there are no program order constraints
             else if (events.size() == 1) {
                 String var = solver.declareIntVar(events.get(0).toString(), "0", "MAX");
                 solver.writeConst(var);
@@ -846,20 +851,24 @@ public class MinhaCheckerParallel {
     public static void genSendReceiveConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate communication constraints");
         solver.writeComment("SEND-RECEIVE CONSTRAINTS");
-        for (MyPair<SocketEvent, SocketEvent> pair : trace.msgEvents.values()) {
-            if(pair.getFirst()!= null && pair.getSecond()!=null) {
-                SocketEvent rcv = pair.getSecond();
-                String cnst = "";
-                //if there are message handler, order SND with HANDLERBEGIN instead of RCV
-                if(!trace.handlerEvents.containsKey(rcv))
-                    cnst = solver.cLt(pair.getFirst().toString(), pair.getSecond().toString());
-                else{
-                    Event handlerbegin = trace.handlerEvents.get(rcv).get(0);
-                    cnst = solver.cLt(pair.getFirst().toString(), handlerbegin.toString());
-                }
+        for (SocketCausalPair pair : trace.msgEvents.values()) {
 
-                solver.writeConst(solver.postNamedAssert(cnst,"COM"));
+            if ( pair.getSnd() == null && pair.getRcv() == null )
+                continue;
+
+            SocketEvent rcv = pair.getRcv();
+            String cnst = "";
+
+            //if there is a message handler, order SND with HANDLERBEGIN instead of RCV
+            if(!trace.handlerEvents.containsKey(rcv))
+                cnst = solver.cLt(pair.getSnd().toString(), pair.getRcv().toString());
+            else{
+                Event handlerbegin = trace.handlerEvents.get(rcv).get(0);
+                cnst = solver.cLt(pair.getSnd().toString(), handlerbegin.toString());
             }
+
+            solver.writeConst(solver.postNamedAssert(cnst,"COM"));
+
         }
     }
 
@@ -888,8 +897,8 @@ public class MinhaCheckerParallel {
 
             for(SocketEvent rcv_j : trace.handlerEvents.keySet()) {
                 if(rcv_i != rcv_j
-                        && rcv_i.getThread().equals(rcv_j.getThread())
-                        && rcv_i.getDstPort() == rcv_j.getDstPort()){
+                                && rcv_i.getThread().equals(rcv_j.getThread())
+                                && rcv_i.getDstPort() == rcv_j.getDstPort()){
 
                     //mutual exclusion: HENDi < HBEGj V HENDj < HBEGi
                     String handlerBegin_i = trace.handlerEvents.get(rcv_i).get(0).toString();
@@ -962,16 +971,16 @@ public class MinhaCheckerParallel {
         for(String var : trace.lockEvents.keySet()){
             // for two lock/unlock pairs on the same locking object,
             // one pair must be executed either before or after the other
-            ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_i = trace.lockEvents.get(var).listIterator(0);
-            ListIterator<MyPair<SyncEvent, SyncEvent>> pairIterator_j;
+            ListIterator<CausalPair<SyncEvent, SyncEvent>> pairIterator_i = trace.lockEvents.get(var).listIterator(0);
+            ListIterator<CausalPair<SyncEvent, SyncEvent>> pairIterator_j;
 
             while(pairIterator_i.hasNext()){
-                MyPair<SyncEvent, SyncEvent> pair_i = pairIterator_i.next();
+                CausalPair<SyncEvent, SyncEvent> pair_i = pairIterator_i.next();
                 //advance iterator to have two different pairs
                 pairIterator_j =  trace.lockEvents.get(var).listIterator(pairIterator_i.nextIndex());
 
                 while(pairIterator_j.hasNext()) {
-                    MyPair<SyncEvent, SyncEvent> pair_j = pairIterator_j.next();
+                    CausalPair<SyncEvent, SyncEvent> pair_j = pairIterator_j.next();
 
                     //there is no need to add constraints for locking pairs of the same thread
                     //as they are already encoded in the program order constraints
@@ -1002,7 +1011,7 @@ public class MinhaCheckerParallel {
 
                 for(SyncEvent notify : trace.notifyEvents.get(condition)){
                     //binary var used to indicate whether the signal operation is mapped to a wait operation or not
-                    String binVar = "B_"+condition+"-W_" + wait.getThread()+"_"+wait.getEventNumber()+"-N_"+notify.getThread()+"_"+notify.getEventNumber();
+                    String binVar = "B_"+condition+"-W_" + wait.getThread()+"_"+wait.getEventId()+"-N_"+notify.getThread()+"_"+notify.getEventId();
 
                     if(!binaryVars.containsKey(notify)){
                         binaryVars.put(notify, new ArrayList<String>());
