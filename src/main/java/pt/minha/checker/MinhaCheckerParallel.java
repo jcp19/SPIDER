@@ -3,7 +3,7 @@ package pt.minha.checker;
 import com.sun.corba.se.impl.orbutil.concurrent.Sync;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
-import pt.haslab.taz.causality.SocketCausalPair;
+import pt.haslab.taz.causality.MessageCausalPair;
 import pt.haslab.taz.events.*;
 import pt.haslab.taz.utils.Utils;
 import static pt.haslab.taz.events.EventType.*;
@@ -173,8 +173,8 @@ public class MinhaCheckerParallel {
         EventIterator events = new EventIterator(trace.eventsPerThread.values());
 
         //Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) -> stack of pairs SND/RCV
-        Map<String, Stack<SocketCausalPair>> socketStacks =
-                        new HashMap<String, Stack<SocketCausalPair>>();
+        Map<String, Stack<MessageCausalPair>> socketStacks =
+                        new HashMap<String, Stack<MessageCausalPair>>();
 
         // Records for each SND event its corresponding thread counter
         Map<Event, Integer> countersOnEvents = new HashMap<Event, Integer>();
@@ -226,10 +226,10 @@ public class MinhaCheckerParallel {
                     SocketEvent snde = trace.sndFromMessageId(messageId);
                     String key = snde.getLineOfCode() + ":" + countersOnEvents.get(snde) + "::" + rcve.getLineOfCode() +
                                     ":" + threadCounters.get(thread);
-                    Stack<SocketCausalPair> s = socketStacks.get(key);
+                    Stack<MessageCausalPair> s = socketStacks.get(key);
 
                     if(s == null) {
-                        s = new Stack<SocketCausalPair>();
+                        s = new Stack<MessageCausalPair>();
                         socketStacks.put(key, s);
                     }
 
@@ -591,9 +591,9 @@ public class MinhaCheckerParallel {
         // a pair of RCV operations is a candidate if:
         // a) both occur at the same node
         // b) are either from different threads of from different message handlers in the same thread
-        List<SocketCausalPair> list = new ArrayList<SocketCausalPair>( trace.msgEvents.values());
-        ListIterator<SocketCausalPair> pairIterator_i = list.listIterator(0);
-        ListIterator<SocketCausalPair> pairIterator_j;
+        List<MessageCausalPair> list = new ArrayList<MessageCausalPair>( trace.msgEvents.values());
+        ListIterator<MessageCausalPair> pairIterator_i = list.listIterator(0);
+        ListIterator<MessageCausalPair> pairIterator_j;
 
         solver.writeComment("SOCKET CHANNEL CONSTRAINTS");
         while(pairIterator_i.hasNext()){
@@ -851,7 +851,7 @@ public class MinhaCheckerParallel {
     public static void genSendReceiveConstraints() throws IOException {
         System.out.println("[MinhaChecker] Generate communication constraints");
         solver.writeComment("SEND-RECEIVE CONSTRAINTS");
-        for (SocketCausalPair pair : trace.msgEvents.values()) {
+        for (MessageCausalPair pair : trace.msgEvents.values()) {
 
             if ( pair.getSnd() == null && pair.getRcv() == null )
                 continue;
