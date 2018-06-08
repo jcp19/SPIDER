@@ -224,7 +224,7 @@ public class MinhaCheckerParallel {
                     SocketEvent rcve = (SocketEvent) e;
                     String messageId = rcve.getMessageId();
                     SocketEvent snde = trace.sndFromMessageId(messageId);
-                    String key = snde.getLineOfCode() + ":" + countersOnEvents.get(snde) + "::" + rcve.getLineOfCode() +
+                    String key = snde == null? "null" : (snde.getLineOfCode() + ":" + countersOnEvents.get(snde)) + "::" + rcve.getLineOfCode() +
                                     ":" + threadCounters.get(thread);
                     Stack<MessageCausalPair> s = socketStacks.get(key);
 
