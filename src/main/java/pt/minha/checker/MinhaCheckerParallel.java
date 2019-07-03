@@ -1,7 +1,5 @@
 package pt.minha.checker;
 
-//import com.sun.corba.se.impl.orbutil.concurrent.Sync;
-
 import org.apache.commons.cli.*;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
@@ -24,9 +22,6 @@ import static pt.haslab.taz.events.EventType.*;
  * Created by nunomachado on 30/03/17.
  */
 public class MinhaCheckerParallel {
-
-    //properties
-    public static Properties props;
 
     //event trace processor
     public static TraceProcessor trace;
@@ -107,15 +102,7 @@ public class MinhaCheckerParallel {
         stacks = new HashMap<String, Stack<String>>();
 
         try {
-            /* String propFile = "checker.racedetection.properties"; */
-            // TODO: change the path of the log from 'props' to a cmd line argument
-            /* props = new Properties();
-            InputStream is = ClassLoader.getSystemClassLoader().getResourceAsStream(propFile);
-            if (is != null) {
-                props.load(is);
-
                 //populate data structures
-                String traceFile = props.getProperty("event-file"); */
                 trace = TraceProcessor.INSTANCE;
                 /* trace.loadEventTrace(traceFile); */
                 trace.loadEventTrace(traceFilePath);
@@ -124,10 +111,8 @@ public class MinhaCheckerParallel {
                 //aggregate partitioned messages to facilitate message race detection
                 trace.aggregateAllPartitionedMessages();
 
-                //remove redundant events
-                /*if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
-                                "true".equals(props.getProperty("redundancy-elimination"))) { */
                 if (cmd.hasOption("r")) {
+                    //remove redundant events
                     removeRedundantEvents();
                     //writeTrace("toCleanTrace.txt");
                     pruneEvents();
@@ -777,7 +762,8 @@ public class MinhaCheckerParallel {
     }
 
     public static void initSolver() throws IOException {
-        String solverPath = props.getProperty("solver-bin"); //set up solver path
+        // Solver path is now set to be z3
+        String solverPath = "z3";
         solver = Z3SolverParallel.getInstance();
         solver.init(solverPath);
     }
