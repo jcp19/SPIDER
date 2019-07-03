@@ -1,19 +1,24 @@
 package pt.minha.checker;
 
-import com.sun.corba.se.impl.orbutil.concurrent.Sync;
+//import com.sun.corba.se.impl.orbutil.concurrent.Sync;
+
+import org.apache.commons.cli.*;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
 import pt.haslab.taz.events.*;
 import pt.haslab.taz.utils.Utils;
-import static pt.haslab.taz.events.EventType.*;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.*;
 
+import static pt.haslab.taz.events.EventType.*;
 
 /**
  * Created by nunomachado on 30/03/17.
@@ -66,6 +71,27 @@ public class MinhaCheckerParallel {
     }
 
     public static void main(String args[]) {
+        Options options = new Options();
+        options.addOption("r", "removeRedundancy", false,
+                "Removes redundant events before checking for race conditions.");
+        options.addOption("f", "file", true, "File containing the distributed trace");
+        CommandLineParser parser = new DefaultParser();
+        String traceFilePath = null;
+        CommandLine cmd = null;
+
+        try {
+            cmd = parser.parse(options,args);
+            if(!cmd.hasOption("f")) {
+                throw new ParseException("No file path specified.");
+            }
+            traceFilePath = cmd.getOptionValue("f");
+        } catch (ParseException e) {
+            System.err.println("Error: " + e);
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("java -jar minha-checker", options);
+            System.exit(0);
+        }
+
         dataRaceCandidates = new HashSet<CausalPair<? extends Event, ? extends Event>>();
         msgContexts = new HashMap<String,Integer>();
         msgRaceCandidates = new HashSet<CausalPair<? extends Event, ? extends Event>>();
@@ -81,24 +107,27 @@ public class MinhaCheckerParallel {
         stacks = new HashMap<String, Stack<String>>();
 
         try {
-            String propFile = "checker.racedetection.properties";
-            props = new Properties();
+            /* String propFile = "checker.racedetection.properties"; */
+            // TODO: change the path of the log from 'props' to a cmd line argument
+            /* props = new Properties();
             InputStream is = ClassLoader.getSystemClassLoader().getResourceAsStream(propFile);
             if (is != null) {
                 props.load(is);
 
                 //populate data structures
-                String traceFile = props.getProperty("event-file");
+                String traceFile = props.getProperty("event-file"); */
                 trace = TraceProcessor.INSTANCE;
-                trace.loadEventTrace(traceFile);
+                /* trace.loadEventTrace(traceFile); */
+                trace.loadEventTrace(traceFilePath);
                 Stats.numEventsTrace = trace.getNumberOfEvents();
 
                 //aggregate partitioned messages to facilitate message race detection
                 trace.aggregateAllPartitionedMessages();
 
                 //remove redundant events
-                if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
-                                "true".equals(props.getProperty("redundancy-elimination"))) {
+                /*if((args.length == 1 && ("--removeRedundancy".equals(args[0]) || "-r".equals(args[0]))) ||
+                                "true".equals(props.getProperty("redundancy-elimination"))) { */
+                if (cmd.hasOption("r")) {
                     removeRedundantEvents();
                     //writeTrace("toCleanTrace.txt");
                     pruneEvents();
@@ -120,7 +149,7 @@ public class MinhaCheckerParallel {
                 solver.close();//*/
 
                 Stats.printStats();
-            }
+            /*}*/
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -290,7 +319,8 @@ public class MinhaCheckerParallel {
                 continue;
             }
 
-            List<Event> events = trace.eventsPerThread.get(thread);
+            // TODO: be sure that the order of the list is the same as the SortedSet
+            List<Event> events = new ArrayList<Event>(trace.eventsPerThread.get(thread));
             for(Event e : events) {
                 EventType type = e.getType();
                 if(prunedEvents.contains(e)) {
@@ -366,7 +396,8 @@ public class MinhaCheckerParallel {
             //System.out.println("~~> " + pair);
             //System.out.println("LIST: " + list);
             if(canRemoveHandler(list)) {
-                List<Event> events = trace.eventsPerThread.get(thread);
+                // TODO: be sure that the order of the list is the same as the SortedSet
+                List<Event> events = new ArrayList<Event>(trace.eventsPerThread.get(thread));
                 prunedEvents.addAll(list);
                 prunedEvents.add(rcve);
                 prunedEvents.add(se);
@@ -509,7 +540,7 @@ public class MinhaCheckerParallel {
         return openLocks.isEmpty();
     }
 
-    private static boolean canRemoveBlock(List<Event> events) {
+    private static boolean canRemoveBlock(Iterable<Event> events) {
         for(Event e : events) {
             EventType type = e.getType();
             if(type == SND || type == RCV || type == WRITE || type == READ || type == NOTIFY || type == NOTIFYALL || type == WAIT) {
@@ -814,15 +845,16 @@ public class MinhaCheckerParallel {
         System.out.println("[MinhaChecker] Generate program order constraints");
         solver.writeComment("PROGRAM ORDER CONSTRAINTS");
         int max = 0;
-        for (List<Event> l : trace.eventsPerThread.values()) {
+        for (SortedSet<Event> l : trace.eventsPerThread.values()) {
             max += l.size();
         }
         solver.writeConst(solver.declareIntVar("MAX"));
         solver.writeConst(solver.postAssert(solver.cEq("MAX", String.valueOf(max))));
 
         //generate program order variables and constraints
-        for (List<Event> events : trace.eventsPerThread.values()) {
-
+        for (SortedSet<Event> eventsSortedSet : trace.eventsPerThread.values()) {
+            // TODO: be sure that the order of the list is the same as the SortedSet
+            List<Event> events = new ArrayList<Event>(eventsSortedSet);
             if (events.isEmpty())
                 continue;
                 //if there's only one event, we just need to declare it as there are no program order constraints
