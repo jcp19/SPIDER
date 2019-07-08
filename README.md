@@ -1,15 +1,16 @@
+# Minha Checker
 
-## Minha Checker
+> TODO: rewrite README
 
 Minha checker provides automated distributed data race detection for Minha via SMT constraint solving. More concretely, Minha checker receives as input an event trace captured at runtime, and generates a happens-before model that encodes the causal relationships between the events. After building the constraint system, Minha checker resorts to an SMT solver, namely Z3, to check for data races. A data race occurs when any two events over the same variable (where at least one of them is a write) are not ordered by a happens-before relationship. 
 
-### Configuration 
+## Configuration 
 
 Edit configuration file `/src/main/resources/checker.racedetection.properties` as follows:
 - **event-file** should indicate the path to the file containing the events captured at runtime. By default, this should point to `minhaTRACER.log`.
 - **solver-bin** should indicate the path to the solver binary. By default, this should point to `lib/z3_4.4.1`. *NOTE: The solver binaries in this repo refer to a version of Z3 compiled for MacOS. For different operating systems, please check the [official site](https://github.com/Z3Prover/z3).*
 
-### Usage
+## Usage
 **1. Compile:**
 
 ```
@@ -24,5 +25,6 @@ $ java -jar ./target/minha-checker-1.0-SNAPSHOT-jar-with-dependencies.jar
 
 **3. Output:** Minha checker outputs a list of event pairs that correspond to data races.
 
-
+## Dependencies
+- Falcon
 
