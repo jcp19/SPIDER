@@ -13,6 +13,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Created by nunomachado on 03/04/17.
  */
+
+// TODO: define an instance of Solver which uses the Z3 API instead of creating a new process
+
 public class Z3SolverParallel implements Solver {
     private static Z3SolverParallel instance = null;
     private static FileWriter outfile;
