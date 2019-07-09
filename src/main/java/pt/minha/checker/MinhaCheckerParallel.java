@@ -59,6 +59,7 @@ public class MinhaCheckerParallel {
       Solver solver = initSolver();
       // generate constraint model
       RaceDetector raceDetector = new RaceDetector(solver, trace);
+      raceDetector.generateConstraintModel();
       // check conflicts
       raceDetector.checkConflicts();
       solver.close();
