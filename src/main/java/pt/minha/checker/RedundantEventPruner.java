@@ -1,5 +1,7 @@
 package pt.minha.checker;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
@@ -10,18 +12,14 @@ import java.util.*;
 
 import static pt.haslab.taz.events.EventType.*;
 
-// TODO: separate this class in two that (both) implement the EventPruner interface,
-//       one for the Data Races and other for Message Races
-
-public class RedundantEventPruner implements EventPruner {
+public class RedundantEventPruner {
   private TraceProcessor traceProcessor;
+  private Logger logger;
 
   // Redundancy Elimination structures
   private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
   // Debug data
   private Set<Event> redundantEvents;
-  // Metadata for detecting possible redundant send/receives
-  private Map<String, Integer> threadCounters;
   // Map: thread id -> Msg Context (Counter)
   private Map<String, Integer> msgContexts;
   // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
@@ -39,10 +37,12 @@ public class RedundantEventPruner implements EventPruner {
     concurrencyContexts = new HashMap<>();
     stacks = new HashMap<>();
     this.traceProcessor = traceProcessor;
+    logger = LoggerFactory.getLogger(RedundantEventPruner.class);
   }
 
-  // TODO: document code, it seems that removeRedundantEvents is used to remove redundant
-  //       data races and the pruneEvents is used to remove redundant message races
+  // TODO: document code, removeRedundantEvents is the literall ReX implementation
+  //       pruneEvents is the extension of ReX to handle distributed systems with
+  //       message passing
 
   public long removeRedundantEvents() {
     // Assumptions:
@@ -50,6 +50,8 @@ public class RedundantEventPruner implements EventPruner {
     //  the function getStack in ReX depends only on the current state of teta-loc
     long count = 0;
     EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
+    // Metadata for detecting possible redundant send/receives
+    Map<String, Integer> threadCounters = new HashMap<>();
 
     // Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) ->
     // stack of pairs SND/RCV
@@ -57,7 +59,6 @@ public class RedundantEventPruner implements EventPruner {
 
     // Records for each SND event its corresponding thread counter
     Map<Event, Integer> countersOnEvents = new HashMap<>();
-    threadCounters = new HashMap<>();
 
     for (String thread : traceProcessor.eventsPerThread.keySet()) {
       threadCounters.put(thread, 0);
@@ -88,6 +89,7 @@ public class RedundantEventPruner implements EventPruner {
           RWEvent rwe = (RWEvent) e;
           if (checkRedundancy(rwe, thread)) {
             // if an event is redundant, remove from the trace
+            logger.debug("Event " + e + " is redundant.");
             events.remove();
             redundantEvents.add(e);
             removeEventMetadata(rwe);
@@ -135,7 +137,7 @@ public class RedundantEventPruner implements EventPruner {
           // advance e
           break;
       }
-      System.out.println("-- Event " + e.getEventId() + " : " + e.toString());
+      // System.out.println("-- Event " + e.getEventId() + " : " + e.toString());
       // printDebugInfo();
     }
     return count;
@@ -251,8 +253,10 @@ public class RedundantEventPruner implements EventPruner {
     return prunedEvents.size();
   }
 
-  // Only removes the data associated with this event from the Trace Processor metadata (not from
-  // eventsPerThread)
+  /**
+   * Removes the data associated with this event from the Trace Processor auxiliary structures.
+   * Does NOT remove events from eventsPerThread.
+   */
   private void removeEventMetadata(Event e) {
     if (e == null) {
       return;
@@ -464,10 +468,5 @@ public class RedundantEventPruner implements EventPruner {
     System.out.println(redundantEvents.toString());
 
     System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-  }
-
-  @Override
-  public long prune() {
-    return 0;
   }
 }
