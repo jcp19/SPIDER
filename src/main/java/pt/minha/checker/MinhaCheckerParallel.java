@@ -1,6 +1,7 @@
 package pt.minha.checker;
 
 import org.apache.commons.cli.*;
+import org.json.JSONException;
 import pt.haslab.taz.TraceProcessor;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
@@ -11,7 +12,7 @@ import java.io.IOException;
 /** Created by nunomachado on 30/03/17. */
 public class MinhaCheckerParallel {
 
-  public static void main(String args[]) {
+  public static void main(String args[]) throws IOException, JSONException {
     // TODO: add flags for message race and data race detection
     Options options = new Options();
     options.addOption(
@@ -37,36 +38,24 @@ public class MinhaCheckerParallel {
       System.exit(0);
     }
 
-    try {
-      // populate data structures
-      TraceProcessor trace = TraceProcessor.INSTANCE;
-      /* trace.loadEventTrace(traceFile); */
-      trace.loadEventTrace(traceFilePath);
-      Stats.numEventsTrace = trace.getNumberOfEvents();
+    TraceProcessor trace = TraceProcessor.INSTANCE;
+    trace.loadEventTrace(traceFilePath);
+    Stats.numEventsTrace = trace.getNumberOfEvents();
+    // aggregate partitioned messages to facilitate message race detection
+    trace.aggregateAllPartitionedMessages();
 
-      // aggregate partitioned messages to facilitate message race detection
-      trace.aggregateAllPartitionedMessages();
-
-      if (cmd.hasOption("r")) {
-        RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
-        // remove redundant events
-        Stats.redundantEvents = eventPruner.removeRedundantEvents();
-        // writeTrace("toCleanTrace.txt");
-        Stats.prunedEvents = eventPruner.pruneEvents();
-        // writeTrace("cleanTrace.txt");
-      }
-
-      Solver solver = initSolver();
-      // generate constraint model
-      RaceDetector raceDetector = new RaceDetector(solver, trace);
-      raceDetector.generateConstraintModel();
-      // check conflicts
-      raceDetector.checkConflicts();
-      solver.close();
-      Stats.printStats();
-    } catch (Exception e) {
-      e.printStackTrace();
+    if (cmd.hasOption("r")) {
+      RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
+      Stats.redundantEvents = eventPruner.removeRedundantEvents();
+      Stats.prunedEvents = eventPruner.pruneEvents();
     }
+
+    Solver solver = initSolver();
+    RaceDetector raceDetector = new RaceDetector(solver, trace);
+    raceDetector.generateConstraintModel();
+    raceDetector.checkConflicts();
+    solver.close();
+    Stats.printStats();
   }
 
   public static Solver initSolver() throws IOException {
