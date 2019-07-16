@@ -1,18 +1,22 @@
 package pt.minha.checker;
 
-import org.apache.commons.cli.*;
+import java.io.IOException;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.json.JSONException;
 import pt.haslab.taz.TraceProcessor;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
 
-import java.io.IOException;
-
 /** Created by nunomachado on 30/03/17. */
 public class MinhaCheckerParallel {
 
-  public static void main(String args[]) throws IOException, JSONException {
+  public static void main(String[] args) throws IOException, JSONException {
     // TODO: add flags for message race and data race detection
     Options options = new Options();
     options.addOption(
