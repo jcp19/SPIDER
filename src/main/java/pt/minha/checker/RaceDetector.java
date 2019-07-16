@@ -1,15 +1,24 @@
 package pt.minha.checker;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.SortedSet;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
-import pt.haslab.taz.events.*;
+import pt.haslab.taz.events.Event;
+import pt.haslab.taz.events.EventType;
+import pt.haslab.taz.events.RWEvent;
+import pt.haslab.taz.events.SocketEvent;
+import pt.haslab.taz.events.SyncEvent;
+import pt.haslab.taz.events.ThreadCreationEvent;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
-
-import java.io.IOException;
-import java.util.*;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
@@ -30,6 +39,7 @@ public class RaceDetector {
   }
 
   public void generateConstraintModel() throws IOException {
+    // TODO: Log time instead of adding it to stats
     long modelStart = System.currentTimeMillis();
     genIntraNodeConstraints();
     genInterNodeConstraints();
@@ -39,11 +49,15 @@ public class RaceDetector {
   public void checkConflicts() throws IOException {
     genDataRaceCandidates();
     genMsgRaceCandidates();
-    checkDataRaces();
-    checkMsgRaces();
+    computeActualDataRaces();
+    computeActualMsgRaces();
   }
 
-  public void checkDataRaces() throws IOException {
+  /**
+   * Computes which of the data race candidates are actually data races.
+   * Must run genDataRaceCandidates() before.
+   */
+  public void computeActualDataRaces() {
     if (dataRaceCandidates.isEmpty()) {
       System.out.println(
           "[MinhaChecker] No data races to check ("
@@ -71,11 +85,14 @@ public class RaceDetector {
     prettyPrintDataRaces();
   }
 
+  /**
+   * Generate all pairs of message race candidates. A pair of RCV operations is a candidate if: a)
+   * both occur at the same node b) are either from different threads of from different message
+   * handlers in the same thread
+   *
+   * @throws IOException
+   */
   public void genMsgRaceCandidates() throws IOException {
-    // generate all pairs of message race candidates
-    // a pair of RCV operations is a candidate if:
-    // a) both occur at the same node
-    // b) are either from different threads of from different message handlers in the same thread
     List<MessageCausalPair> list = new ArrayList<>(traceProcessor.msgEvents.values());
     ListIterator<MessageCausalPair> pairIterator_i = list.listIterator(0);
     ListIterator<MessageCausalPair> pairIterator_j;
@@ -141,7 +158,11 @@ public class RaceDetector {
     return "(" + fst + ", " + snd + ")";
   }
 
-  public void checkMsgRaces() throws IOException {
+  /**
+   * Computes which of the message race candidates are actually message races.
+   * Must run genMsgRaceCandidates() before.
+   */
+  public void computeActualMsgRaces() {
     if (msgRaceCandidates.isEmpty()) {
       System.out.println(
           "[MinhaChecker] No message races to check ("
@@ -183,8 +204,7 @@ public class RaceDetector {
       SocketEvent snd2 = (SocketEvent) conf.getSecond();
       SocketEvent rcv1 = traceProcessor.msgEvents.get(snd1.getMessageId()).getRcv();
       SocketEvent rcv2 = traceProcessor.msgEvents.get(snd2.getMessageId()).getRcv();
-      CausalPair<SocketEvent, SocketEvent> rcv_conf =
-          new CausalPair<SocketEvent, SocketEvent>(rcv1, rcv2);
+      CausalPair<SocketEvent, SocketEvent> rcv_conf = new CausalPair<>(rcv1, rcv2);
       System.out.println("~~ " + orderedToString(rcv_conf));
 
       // compute read-write sets for each message handler
@@ -218,15 +238,14 @@ public class RaceDetector {
     }
   }
 
+  /**
+   * Generate all pairs of data race candidates. A pair of RW operations is a candidate if: a) at
+   * least of one of the operations is a write b) both operations access the same variable c)
+   * operations are from different threads, but from the same node.
+   */
   public void genDataRaceCandidates() {
-    // generate all pairs of data race candidates
-    // a pair of RW operations is a candidate if:
-    // a) at least of one of the operations is a write
-    // b) both operations access the same variable
-    // c) operations are from different threads, but from the same node
     for (String var : traceProcessor.writeEvents.keySet()) {
       for (RWEvent w1 : traceProcessor.writeEvents.get(var)) {
-
         // pair with all other writes
         for (RWEvent w2 : traceProcessor.writeEvents.get(var)) {
           if (w1.conflictsWith(w2)) {
@@ -329,7 +348,7 @@ public class RaceDetector {
     // generate program order variables and constraints
     for (SortedSet<Event> eventsSortedSet : traceProcessor.eventsPerThread.values()) {
       // TODO: be sure that the order of the list is the same as the SortedSet
-      List<Event> events = new ArrayList<Event>(eventsSortedSet);
+      List<Event> events = new ArrayList<>(eventsSortedSet);
       if (events.isEmpty()) continue;
       // if there's only one event, we just need to declare it as there are no program order
       // constraints
@@ -386,8 +405,7 @@ public class RaceDetector {
     solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
     String TAG = "HND";
 
-    HashMap<String, HashSet<SocketEvent>> rcvPerThread =
-        new HashMap<String, HashSet<SocketEvent>>();
+    HashMap<String, HashSet<SocketEvent>> rcvPerThread = new HashMap<>();
 
     /* encode mutual exclusion constraints, which state that two message handlers in the same thread
     must occur one before the other in any order */
@@ -395,7 +413,7 @@ public class RaceDetector {
       // store all rcv events per thread-socket
       String key = rcv_i.getThread() + "-" + rcv_i.getDstPort();
       if (!rcvPerThread.containsKey(key)) {
-        rcvPerThread.put(key, new HashSet<SocketEvent>());
+        rcvPerThread.put(key, new HashSet<>());
       }
       rcvPerThread.get(key).add(rcv_i);
 
