@@ -17,14 +17,15 @@ import pt.minha.checker.stats.Stats;
 public class MinhaCheckerParallel {
 
   public static void main(String[] args) throws IOException, JSONException {
-    // TODO: add flags for message race and data race detection
     Options options = new Options();
     options.addOption(
         "r",
         "removeRedundancy",
         false,
         "Removes redundant events before checking for race conditions.");
-    options.addOption("f", "file", true, "File containing the distributed trace");
+    options.addOption("d", "dataRaces", false, "Check for data races.");
+    options.addOption("m", "messageRaces", false, "Check for message races.");
+    options.addOption("f", "file", true, "File containing the distributed trace.");
     CommandLineParser parser = new DefaultParser();
     String traceFilePath = null;
     CommandLine cmd = null;
@@ -39,7 +40,7 @@ public class MinhaCheckerParallel {
       System.err.println("Error: " + e);
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp("java -jar minha-checker", options);
-      System.exit(0);
+      System.exit(1);
     }
 
     TraceProcessor trace = TraceProcessor.INSTANCE;
@@ -48,7 +49,8 @@ public class MinhaCheckerParallel {
     // aggregate partitioned messages to facilitate message race detection
     trace.aggregateAllPartitionedMessages();
 
-    if (cmd.hasOption("r")) {
+    if (cmd.hasOption("d") && cmd.hasOption("r")) {
+      // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
       Stats.redundantEvents = eventPruner.removeRedundantEvents();
       Stats.prunedEvents = eventPruner.pruneEvents();
@@ -57,7 +59,18 @@ public class MinhaCheckerParallel {
     Solver solver = initSolver();
     RaceDetector raceDetector = new RaceDetector(solver, trace);
     raceDetector.generateConstraintModel();
-    raceDetector.checkConflicts();
+    // raceDetector.checkConflicts();
+
+    if (cmd.hasOption("d")) {
+      raceDetector.genDataRaceCandidates();
+      raceDetector.computeActualDataRaces();
+    }
+
+    if (cmd.hasOption("m")) {
+      raceDetector.genMsgRaceCandidates();
+      raceDetector.computeActualMsgRaces();
+    }
+
     solver.close();
     Stats.printStats();
   }
