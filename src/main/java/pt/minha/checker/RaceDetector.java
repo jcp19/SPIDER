@@ -7,6 +7,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.SortedSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
@@ -19,10 +21,10 @@ import pt.haslab.taz.events.ThreadCreationEvent;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
-
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
 public class RaceDetector {
+  private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
   private HashSet<CausalPair<? extends Event, ? extends Event>> dataRaceCandidates;
   private HashSet<CausalPair<? extends Event, ? extends Event>> msgRaceCandidates;
   // HB model, used to encode message arrival constraints
@@ -54,8 +56,8 @@ public class RaceDetector {
   }
 
   /**
-   * Computes which of the data race candidates are actually data races.
-   * Must run genDataRaceCandidates() before.
+   * Computes which of the data race candidates are actually data races. Must run
+   * genDataRaceCandidates() before.
    */
   public void computeActualDataRaces() {
     if (dataRaceCandidates.isEmpty()) {
@@ -75,6 +77,8 @@ public class RaceDetector {
     long checkingStart = System.currentTimeMillis();
     dataRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(dataRaceCandidates);
     Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
+    // TODO: understand how this is computed, define total Data Race pairs as a set of pairs of
+    //       locations instead of pairs of events
     Stats.totalDataRacePairs = dataRaceCandidates.size();
 
     System.out.println(
@@ -101,14 +105,18 @@ public class RaceDetector {
     while (pairIterator_i.hasNext()) {
       SocketEvent rcv1 = pairIterator_i.next().getRcv();
 
-      if (rcv1 == null) continue;
+      if (rcv1 == null) {
+        continue;
+      }
 
       // advance iterator to have two different pairs
       pairIterator_j = list.listIterator(pairIterator_i.nextIndex());
 
       while (pairIterator_j.hasNext()) {
         SocketEvent rcv2 = pairIterator_j.next().getRcv();
-        if (rcv2 == null) continue;
+        if (rcv2 == null) {
+          continue;
+        }
 
         if (rcv1.conflictsWith(rcv2)) {
           // make a pair with SND events because
@@ -133,9 +141,11 @@ public class RaceDetector {
             String cnst;
             // check trace order of SND, as the iterator does not traverse the events
             // according to the program order
-            if (snd1.getEventId() < snd2.getEventId())
+            if (snd1.getEventId() < snd2.getEventId()) {
               cnst = solver.cLt(rcv1.toString(), snd2.toString());
-            else cnst = solver.cLt(rcv2.toString(), snd1.toString());
+            } else {
+              cnst = solver.cLt(rcv2.toString(), snd1.toString());
+            }
             solver.writeConst(solver.postNamedAssert(cnst, "TCP"));
           }
         }
@@ -159,8 +169,8 @@ public class RaceDetector {
   }
 
   /**
-   * Computes which of the message race candidates are actually message races.
-   * Must run genMsgRaceCandidates() before.
+   * Computes which of the message race candidates are actually message races. Must run
+   * genMsgRaceCandidates() before.
    */
   public void computeActualMsgRaces() {
     if (msgRaceCandidates.isEmpty()) {
@@ -216,13 +226,15 @@ public class RaceDetector {
         HashSet<RWEvent> readWriteSet2 = new HashSet<>();
 
         for (Event e : traceProcessor.handlerEvents.get(rcv1)) {
-          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE)
+          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE) {
             readWriteSet1.add((RWEvent) e);
+          }
         }
 
         for (Event e : traceProcessor.handlerEvents.get(rcv2)) {
-          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE)
+          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE) {
             readWriteSet2.add((RWEvent) e);
+          }
         }
 
         // check for conflicts
@@ -317,9 +329,12 @@ public class RaceDetector {
         segmentIt = genSegmentOrderConstraints(events, segmentIt + 1);
 
         // store event next to RCV to later encode the message arrival order
-        if (segmentIt < events.size() - 1)
+        if (segmentIt < events.size() - 1) {
           rcvNextEvent.put((SocketEvent) e, events.get(segmentIt + 1));
-      } else if (e.getType() == EventType.HNDLEND) break;
+        }
+      } else if (e.getType() == EventType.HNDLEND) {
+        break;
+      }
     }
 
     // write segment's order constraint
@@ -349,15 +364,17 @@ public class RaceDetector {
     for (SortedSet<Event> eventsSortedSet : traceProcessor.eventsPerThread.values()) {
       // TODO: be sure that the order of the list is the same as the SortedSet
       List<Event> events = new ArrayList<>(eventsSortedSet);
-      if (events.isEmpty()) continue;
-      // if there's only one event, we just need to declare it as there are no program order
-      // constraints
-      else if (events.size() == 1) {
+      if (events.isEmpty()) {
+        continue;
+      } else if (events.size() == 1) {
+        // if there's only one event, we just need to declare it as there are no program order
+        // constraints
         String var = solver.declareIntVar(events.get(0).toString(), "0", "MAX");
         solver.writeConst(var);
+      } else {
+        // generate program constraints for the thread segment
+        genSegmentOrderConstraints(events, 0);
       }
-      // generate program constraints for the thread segment
-      else genSegmentOrderConstraints(events, 0);
 
       // build program order constraints for the whole thread trace
       /*StringBuilder orderConstraint = new StringBuilder();
@@ -378,15 +395,17 @@ public class RaceDetector {
     solver.writeComment("SEND-RECEIVE CONSTRAINTS");
     for (MessageCausalPair pair : traceProcessor.msgEvents.values()) {
 
-      if (pair.getSnd() == null && pair.getRcv() == null) continue;
+      if (pair.getSnd() == null && pair.getRcv() == null) {
+        continue;
+      }
 
       SocketEvent rcv = pair.getRcv();
       String cnst = "";
 
       // if there is a message handler, order SND with HANDLERBEGIN instead of RCV
-      if (!traceProcessor.handlerEvents.containsKey(rcv))
+      if (!traceProcessor.handlerEvents.containsKey(rcv)) {
         cnst = solver.cLt(pair.getSnd().toString(), pair.getRcv().toString());
-      else {
+      } else {
         Event handlerbegin = traceProcessor.handlerEvents.get(rcv).get(0);
         cnst = solver.cLt(pair.getSnd().toString(), handlerbegin.toString());
       }
@@ -457,7 +476,9 @@ public class RaceDetector {
         Event nextEvent = rcvNextEvent.get(rcv_i);
 
         // if the RCV is the last event, then nextEvent == null
-        if (nextEvent == null) continue;
+        if (nextEvent == null) {
+          continue;
+        }
 
         StringBuilder outerOr = new StringBuilder();
         for (SocketEvent rcv_j : rcvSet) {
@@ -531,7 +552,9 @@ public class RaceDetector {
 
           // there is no need to add constraints for locking pairs of the same thread
           // as they are already encoded in the program order constraints
-          if (pair_i.getFirst().getThread().equals(pair_j.getFirst().getThread())) continue;
+          if (pair_i.getFirst().getThread().equals(pair_j.getFirst().getThread())) {
+            continue;
+          }
 
           // Ui < Lj || Uj < Li
           String cnstUi_Lj =
@@ -548,10 +571,9 @@ public class RaceDetector {
   public void genWaitNotifyConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate wait-notify constraints");
     solver.writeComment("WAIT-NOTIFY CONSTRAINTS");
-    HashMap<SyncEvent, List<String>> binaryVars =
-        // map: notify event -> list of all binary vars corresponding to that
-        new HashMap<>();
+    // map: notify event -> list of all binary vars corresponding to that
     // notify
+    HashMap<SyncEvent, List<String>> binaryVars = new HashMap<>();
 
     // for a given condition, each notify can be mapped to any wait
     // but a wait can only have a single notify
@@ -575,7 +597,7 @@ public class RaceDetector {
                   + notify.getEventId();
 
           if (!binaryVars.containsKey(notify)) {
-            binaryVars.put(notify, new ArrayList<String>());
+            binaryVars.put(notify, new ArrayList<>());
           }
           binaryVars.get(notify).add(binVar);
 
