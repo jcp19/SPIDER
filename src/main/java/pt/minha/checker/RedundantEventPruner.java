@@ -1,20 +1,32 @@
 package pt.minha.checker;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
-import pt.haslab.taz.events.*;
+import pt.haslab.taz.events.Event;
+import pt.haslab.taz.events.EventIterator;
+import pt.haslab.taz.events.EventType;
+import pt.haslab.taz.events.RWEvent;
+import pt.haslab.taz.events.SocketEvent;
+import pt.haslab.taz.events.SyncEvent;
+import pt.haslab.taz.events.ThreadCreationEvent;
 import pt.haslab.taz.utils.Utils;
-
-import java.util.*;
 
 import static pt.haslab.taz.events.EventType.*;
 
 public class RedundantEventPruner {
   private TraceProcessor traceProcessor;
-  private Logger logger;
+  private static final Logger logger = LoggerFactory.getLogger(RedundantEventPruner.class);
 
   // Redundancy Elimination structures
   private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
@@ -37,17 +49,21 @@ public class RedundantEventPruner {
     concurrencyContexts = new HashMap<>();
     stacks = new HashMap<>();
     this.traceProcessor = traceProcessor;
-    logger = LoggerFactory.getLogger(RedundantEventPruner.class);
   }
 
   // TODO: document code, removeRedundantEvents is the literall ReX implementation
   //       pruneEvents is the extension of ReX to handle distributed systems with
   //       message passing
+  // TODO: Model Check both algorithms
 
+  /**
+   * Removes redundant events for data race detection. Implements the ReX algorithm. Assumes: 1) the
+   * order of the events iterator corresponds to the chronological order of the events 2) the
+   * function getStack in ReX depends only on the current state of teta-loc
+   *
+   * @return
+   */
   public long removeRedundantEvents() {
-    // Assumptions:
-    //  The order of the events iterator corresponds to the chronological order of the events
-    //  the function getStack in ReX depends only on the current state of teta-loc
     long count = 0;
     EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
     // Metadata for detecting possible redundant send/receives
@@ -254,8 +270,8 @@ public class RedundantEventPruner {
   }
 
   /**
-   * Removes the data associated with this event from the Trace Processor auxiliary structures.
-   * Does NOT remove events from eventsPerThread.
+   * Removes the data associated with this event from the Trace Processor auxiliary structures. Does
+   * NOT remove events from eventsPerThread.
    */
   private void removeEventMetadata(Event e) {
     if (e == null) {
@@ -438,7 +454,9 @@ public class RedundantEventPruner {
     if (term == null) {
       for (CausalPair<X, Y> pair : coll) {
         Y snd = pair.getSecond();
-        if (snd == null) return pair;
+        if (snd == null) {
+          return pair;
+        }
       }
       return null;
     }
@@ -453,9 +471,9 @@ public class RedundantEventPruner {
     return null;
   }
 
-  public void printDebugInfo() {
-    System.out.println("*************************************************");
-
+  public void logDebugInfo() {
+    // TODO: complete
+    StringBuilder logMessage = new StringBuilder();
     System.out.println("Concurrency contexts:");
     for (Map.Entry<String, Set<String>> cc : concurrencyContexts.entrySet()) {
       System.out.println(cc.getKey() + " : " + cc.getValue());
@@ -466,7 +484,5 @@ public class RedundantEventPruner {
 
     System.out.println("Redundant events:");
     System.out.println(redundantEvents.toString());
-
-    System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
   }
 }
