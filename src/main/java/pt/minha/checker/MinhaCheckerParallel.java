@@ -53,14 +53,15 @@ public class MinhaCheckerParallel {
       // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
       Stats.redundantEvents = eventPruner.removeRedundantEvents();
-      Stats.prunedEvents = eventPruner.pruneEvents();
+      // Stats.prunedEvents = eventPruner.pruneEvents();
     }
 
     Solver solver = initSolver();
     RaceDetector raceDetector = new RaceDetector(solver, trace);
     raceDetector.generateConstraintModel();
-    // raceDetector.checkConflicts();
 
+    // Instead of using 'raceDetector.checkConflicts()' to check all kinds of conflicts, it
+    // executes the analysis for data races and message races depending on the program flags
     if (cmd.hasOption("d")) {
       raceDetector.genDataRaceCandidates();
       raceDetector.computeActualDataRaces();
