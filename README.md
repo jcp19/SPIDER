@@ -5,7 +5,7 @@
 [![MIT License][license-shield]][license-url]
 
 <br/>
-<p align="center"><h2 align="center">Best-README-Template</h2><p align="center">
+<p align="center"><h1 align="center">minha-checker</h1><p align="center">
 Automated distributed data race detection from distributed logs via SMT constraint solving.
 <br/>
 <!--<a href=""><strong>Explore the docs &#xBB;</strong></a>
@@ -28,6 +28,7 @@ Edit configuration file `/src/main/resources/checker.racedetection.properties` a
 - **event-file** should indicate the path to the file containing the events captured at runtime. By default, this should point to `minhaTRACER.log`.
 - **solver-bin** should indicate the path to the solver binary. By default, this should point to `lib/z3_4.4.1`. *NOTE: The solver binaries in this repo refer to a version of Z3 compiled for MacOS. For different operating systems, please check the [official site](https://github.com/Z3Prover/z3).*
 
+## Building the project
 ## Usage
 POR FLAGS!!!
 **1. Compile:**
@@ -42,8 +43,8 @@ $ mvn package
 $ java -jar ./target/minha-checker-1.0-SNAPSHOT-jar-with-dependencies.jar
 ```
 
-**3. Output:** Minha checker outputs a list of event pairs that correspond to data races.
+**3. Output:** Minha checker outputs a list of event pairs that correspond to data races. TODO: mudar para linhas de código (?)
 
 ## Dependencies
 - Falcon
-
+- [z3](https://github.com/Z3Prover/z3)
