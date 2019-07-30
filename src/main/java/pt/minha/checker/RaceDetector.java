@@ -21,7 +21,11 @@ import pt.haslab.taz.events.ThreadCreationEvent;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
+import pt.minha.checker.utils.NotImplementedException;
+
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
+
+// TODO: reagroup methods logically
 
 public class RaceDetector {
   private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
@@ -625,5 +629,10 @@ public class RaceDetector {
                 solver.cLeq(solver.cSummation(binaryVars.get(notify)), "1"), "WN"));
       }
     }
+  }
+
+  public long countRaces() {
+    // TODO
+    throw new NotImplementedException("countRaces not implemented.");
   }
 }
