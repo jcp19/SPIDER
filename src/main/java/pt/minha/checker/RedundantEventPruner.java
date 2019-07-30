@@ -24,6 +24,7 @@ import pt.haslab.taz.utils.Utils;
 
 import static pt.haslab.taz.events.EventType.*;
 
+@Deprecated
 public class RedundantEventPruner {
   private TraceProcessor traceProcessor;
   private static final Logger logger = LoggerFactory.getLogger(RedundantEventPruner.class);
