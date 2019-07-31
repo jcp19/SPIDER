@@ -1,6 +1,7 @@
 package pt.minha.checker.stats;
 
 /** Created by nunomachado on 11/05/17. */
+@Deprecated
 public class Stats {
 
   // TODO: change static fields to instance variables
