@@ -17,9 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Z3SolverParallel implements Solver {
   private static Z3SolverParallel instance = null;
   private static FileWriter outfile;
-  public static String MODEL_FILENAME = "modelParallel.txt";
-  public static String SOLVER_PATH;
-  public static int CORES;
+  private static final String MODEL_FILENAME = "modelParallel.txt";
+  private static int CORES;
   private static Process[] z3Processes;
   private static BufferedReader[] readers;
   private static BufferedWriter[] writers;
@@ -39,7 +38,6 @@ public class Z3SolverParallel implements Solver {
     z3Processes = new Process[CORES];
     readers = new BufferedReader[CORES];
     writers = new BufferedWriter[CORES];
-    SOLVER_PATH = solverPath;
     outfile = new FileWriter(new File(MODEL_FILENAME));
 
     for (int i = 0; i < CORES; i++) {
@@ -87,10 +85,10 @@ public class Z3SolverParallel implements Solver {
   public HashSet<CausalPair<? extends Event, ? extends Event>> checkRacesParallel(
       HashSet<CausalPair<? extends Event, ? extends Event>> candidates) {
     try {
-      racesFound = new ConcurrentHashMap<Integer, CausalPair<? extends Event, ? extends Event>>();
+      racesFound = new ConcurrentHashMap<>();
       int batchsize = candidates.size() / CORES;
       List<CausalPair<? extends Event, ? extends Event>> candidatesList =
-          new ArrayList<CausalPair<? extends Event, ? extends Event>>(candidates);
+          new ArrayList<>(candidates);
       WorkerZ3[] workers = new WorkerZ3[CORES];
       int start = 0;
       int end;
@@ -111,7 +109,7 @@ public class Z3SolverParallel implements Solver {
     } catch (Exception e) {
       e.printStackTrace();
     } finally {
-      return new HashSet<CausalPair<? extends Event, ? extends Event>>(racesFound.values());
+      return new HashSet<>(racesFound.values());
     }
   }
 
@@ -197,8 +195,7 @@ public class Z3SolverParallel implements Solver {
   }
 
   public String declareIntVar(String varname) {
-    String ret = "(declare-const " + varname + " Int)";
-    return ret;
+    return "(declare-const " + varname + " Int)";
   }
 
   public String declareIntVar(String varname, int min, int max) {
@@ -227,30 +224,29 @@ public class Z3SolverParallel implements Solver {
     return ("(assert (! " + constraint + ":named " + label + Stats.numConstraints + "))");
   }
 
-  public String push() {
+  private String push() {
     return "(push)";
   }
 
-  public String pop() {
+  private String pop() {
     return "(pop)";
   }
 
-  public String checkSat() {
+  private String checkSat() {
     return "(check-sat)";
   }
 
-  public class WorkerZ3 extends Thread {
+  class WorkerZ3 extends Thread {
     private int id;
     private int startPos;
     private int endPos;
     List<CausalPair<? extends Event, ? extends Event>> candidates;
 
-    public WorkerZ3(
+    WorkerZ3(
         int tid,
         int start,
         int end,
-        List<CausalPair<? extends Event, ? extends Event>> candidatePairs)
-        throws IOException {
+        List<CausalPair<? extends Event, ? extends Event>> candidatePairs) {
       id = tid;
       startPos = start;
       endPos = end;
@@ -287,7 +283,7 @@ public class Z3SolverParallel implements Solver {
       }
     }
 
-    public boolean checkRace(String e1, String e2, boolean isMsgRace) {
+    boolean checkRace(String e1, String e2, boolean isMsgRace) {
       try {
         writers[id].write(push() + "\n");
         String conflictConst;
