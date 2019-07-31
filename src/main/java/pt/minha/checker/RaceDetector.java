@@ -2,11 +2,14 @@ package pt.minha.checker;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Set;
 import java.util.SortedSet;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pt.haslab.taz.TraceProcessor;
@@ -21,13 +24,12 @@ import pt.haslab.taz.events.ThreadCreationEvent;
 import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
 import pt.minha.checker.stats.Stats;
-import pt.minha.checker.utils.NotImplementedException;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
 // TODO: reagroup methods logically
 
-public class RaceDetector {
+class RaceDetector {
   private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
   private HashSet<CausalPair<? extends Event, ? extends Event>> dataRaceCandidates;
   private HashSet<CausalPair<? extends Event, ? extends Event>> msgRaceCandidates;
@@ -45,11 +47,12 @@ public class RaceDetector {
   }
 
   public void generateConstraintModel() throws IOException {
-    // TODO: Log time instead of adding it to stats
     long modelStart = System.currentTimeMillis();
     genIntraNodeConstraints();
     genInterNodeConstraints();
-    Stats.buildingModeltime = System.currentTimeMillis() - modelStart;
+    double buildingModelTime = System.currentTimeMillis() - modelStart;
+    logger.info(
+        "Time to generate constraint model: " + (buildingModelTime / (double) 1000) + " seconds");
   }
 
   public void checkConflicts() throws IOException {
@@ -73,6 +76,7 @@ public class RaceDetector {
     }
 
     Stats.totalDataRaceCandidates = dataRaceCandidates.size();
+    Stats.totalDataRaceCandidateLocations = countDataRaces();
     System.out.println(
         "\n[MinhaChecker] Start data race checking ("
             + Stats.totalDataRaceCandidates
@@ -81,9 +85,8 @@ public class RaceDetector {
     long checkingStart = System.currentTimeMillis();
     dataRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(dataRaceCandidates);
     Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
-    // TODO: understand how this is computed, define total Data Race pairs as a set of pairs of
-    //       locations instead of pairs of events
     Stats.totalDataRacePairs = dataRaceCandidates.size();
+    Stats.totalDataRacePairLocations = countDataRaces();
 
     System.out.println(
         "\n#Data Race Candidates: "
@@ -159,11 +162,13 @@ public class RaceDetector {
     // DEBUG: print candidate pairs
     System.out.println("Message Race candidates: ");
     for (CausalPair<? extends Event, ? extends Event> pair : msgRaceCandidates) {
-      System.out.println("\t" + orderedToString(pair));
+      System.out.println("\t" + causalPairToOrderedString(pair));
     } // */
   }
 
-  static String orderedToString(CausalPair<? extends Event, ? extends Event> pair) {
+  // TODO: use the same way to order a string as used in `getRacesAsLocationPairs`
+  private static String causalPairToOrderedString(
+      CausalPair<? extends Event, ? extends Event> pair) {
     String fst = pair.getFirst() != null ? pair.getFirst().toString() : " ";
     String snd = pair.getSecond() != null ? pair.getSecond().toString() : " ";
     if (fst.compareTo(snd) < 0) {
@@ -180,7 +185,7 @@ public class RaceDetector {
     if (msgRaceCandidates.isEmpty()) {
       System.out.println(
           "[MinhaChecker] No message races to check ("
-              + Stats.totalDataRaceCandidates
+              + Stats.totalMsgRaceCandidates
               + " candidates)");
       return;
     }
@@ -205,13 +210,13 @@ public class RaceDetector {
     prettyPrintMessageRaces();
   }
 
-  public void prettyPrintDataRaces() {
+  private void prettyPrintDataRaces() {
     for (CausalPair<? extends Event, ? extends Event> race : dataRaceCandidates) {
-      System.out.println("-- " + orderedToString(race));
+      System.out.println("-- " + causalPairToOrderedString(race));
     }
   }
 
-  public void prettyPrintMessageRaces() {
+  private void prettyPrintMessageRaces() {
     for (CausalPair<? extends Event, ? extends Event> conf : msgRaceCandidates) {
       // translate SND events to their respective RCV events
       SocketEvent snd1 = (SocketEvent) conf.getFirst();
@@ -219,7 +224,7 @@ public class RaceDetector {
       SocketEvent rcv1 = traceProcessor.msgEvents.get(snd1.getMessageId()).getRcv();
       SocketEvent rcv2 = traceProcessor.msgEvents.get(snd2.getMessageId()).getRcv();
       CausalPair<SocketEvent, SocketEvent> rcv_conf = new CausalPair<>(rcv1, rcv2);
-      System.out.println("~~ " + orderedToString(rcv_conf));
+      System.out.println("~~ " + causalPairToOrderedString(rcv_conf));
 
       // compute read-write sets for each message handler
       if (!traceProcessor.handlerEvents.containsKey(rcv1)
@@ -246,7 +251,7 @@ public class RaceDetector {
           for (RWEvent e2 : readWriteSet2) {
             if (e1.conflictsWith(e2)) {
               CausalPair<RWEvent, RWEvent> race = new CausalPair<>(e1, e2);
-              System.out.println("\t-- conflict " + orderedToString(race));
+              System.out.println("\t-- conflict " + causalPairToOrderedString(race));
             }
           }
         }
@@ -266,9 +271,7 @@ public class RaceDetector {
         for (RWEvent w2 : traceProcessor.writeEvents.get(var)) {
           if (w1.conflictsWith(w2)) {
             CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<>(w1, w2);
-            if (!dataRaceCandidates.contains(tmpPair)) {
-              dataRaceCandidates.add(tmpPair);
-            }
+            dataRaceCandidates.add(tmpPair);
           }
         }
 
@@ -276,7 +279,7 @@ public class RaceDetector {
         if (traceProcessor.readEvents.containsKey(var)) {
           for (RWEvent r2 : traceProcessor.readEvents.get(var)) {
             CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<>(w1, r2);
-            if (w1.conflictsWith(r2) && !dataRaceCandidates.contains(tmpPair)) {
+            if (w1.conflictsWith(r2)) {
               dataRaceCandidates.add(tmpPair);
             }
           }
@@ -287,11 +290,11 @@ public class RaceDetector {
     // DEBUG: print candidate pairs
     System.out.println("Data Race candidates: ");
     for (CausalPair<? extends Event, ? extends Event> pair : dataRaceCandidates) {
-      System.out.println("\t" + orderedToString(pair));
+      System.out.println("\t" + causalPairToOrderedString(pair));
     } // */
   }
 
-  public void genIntraNodeConstraints() throws IOException {
+  private void genIntraNodeConstraints() throws IOException {
     genProgramOrderConstraints();
     genForkStartConstraints();
     genJoinExitConstraints();
@@ -299,7 +302,7 @@ public class RaceDetector {
     genLockingConstraints();
   }
 
-  public void genInterNodeConstraints() throws IOException {
+  private void genInterNodeConstraints() throws IOException {
     genSendReceiveConstraints();
     genMessageHandlingConstraints();
   }
@@ -310,7 +313,7 @@ public class RaceDetector {
    *
    * @return
    */
-  public int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException {
+  private int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException {
 
     // constraint representing the HB relation for the thread's segment
     StringBuilder orderConstraint = new StringBuilder();
@@ -354,7 +357,7 @@ public class RaceDetector {
    *
    * @throws IOException
    */
-  public void genProgramOrderConstraints() throws IOException {
+  private void genProgramOrderConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate program order constraints");
     solver.writeComment("PROGRAM ORDER CONSTRAINTS");
     int max = 0;
@@ -394,7 +397,7 @@ public class RaceDetector {
     }
   }
 
-  public void genSendReceiveConstraints() throws IOException {
+  private void genSendReceiveConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate communication constraints");
     solver.writeComment("SEND-RECEIVE CONSTRAINTS");
     for (MessageCausalPair pair : traceProcessor.msgEvents.values()) {
@@ -423,7 +426,7 @@ public class RaceDetector {
    *
    * @throws IOException
    */
-  public void genMessageHandlingConstraints() throws IOException {
+  private void genMessageHandlingConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate message handling constraints");
     solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
     String TAG = "HND";
@@ -509,7 +512,7 @@ public class RaceDetector {
     }
   }
 
-  public void genForkStartConstraints() throws IOException {
+  private void genForkStartConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate fork-start constraints");
     solver.writeComment("FORK-START CONSTRAINTS");
     for (List<ThreadCreationEvent> l : traceProcessor.forkEvents.values()) {
@@ -524,7 +527,7 @@ public class RaceDetector {
     }
   }
 
-  public void genJoinExitConstraints() throws IOException {
+  private void genJoinExitConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate join-end constraints");
     solver.writeComment("JOIN-END CONSTRAINTS");
     for (List<ThreadCreationEvent> l : traceProcessor.joinEvents.values()) {
@@ -535,7 +538,7 @@ public class RaceDetector {
     }
   }
 
-  public void genLockingConstraints() throws IOException {
+  private void genLockingConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate locking constraints");
     solver.writeComment("LOCKING CONSTRAINTS");
     for (String var : traceProcessor.lockEvents.keySet()) {
@@ -572,7 +575,7 @@ public class RaceDetector {
     }
   }
 
-  public void genWaitNotifyConstraints() throws IOException {
+  private void genWaitNotifyConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate wait-notify constraints");
     solver.writeComment("WAIT-NOTIFY CONSTRAINTS");
     // map: notify event -> list of all binary vars corresponding to that
@@ -631,8 +634,26 @@ public class RaceDetector {
     }
   }
 
-  public long countRaces() {
-    // TODO
-    throw new NotImplementedException("countRaces not implemented.");
+  /**
+   * Computes the set of pairs of locations that correspond to races from the set of `CausalPair`s
+   * @param causalPairs
+   * @return
+   */
+  private Set<String> getRacesAsLocationPairs(
+      Set<CausalPair<? extends Event, ? extends Event>> causalPairs) {
+    return causalPairs.stream()
+        .map(
+            causalPair -> {
+              String[] locations = {
+                causalPair.getFirst().getLineOfCode(), causalPair.getSecond().getLineOfCode()
+              };
+              Arrays.sort(locations);
+              return locations[0] + locations[1];
+            })
+        .collect(Collectors.toSet());
+  }
+
+  private long countDataRaces() {
+    return getRacesAsLocationPairs(dataRaceCandidates).size();
   }
 }

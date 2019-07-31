@@ -13,7 +13,7 @@ public class Stats {
   public static long redundantEvents = 0;
   public static long redundantSocketEvents = 0;
   public static long prunedEvents = 0;
-  public static double buildingModeltime = 0;
+  //public static double buildingModelTime = 0;
 
   // data race variables
   public static long totalDataRaceCandidates = 0;
@@ -24,6 +24,8 @@ public class Stats {
   public static long totalMsgRaceCandidates = 0;
   public static long totalMsgRacePairs = 0;
   public static double checkingTimeMsgRace = 0;
+  public static long totalDataRaceCandidateLocations;
+  public static long totalDataRacePairLocations;
 
   public static void printStats() {
     System.out.println("\n=======================");
@@ -34,13 +36,15 @@ public class Stats {
     System.out.println("> Number of redundant socket events in trace:\t" + redundantSocketEvents);
     System.out.println("> Number of pruned events in trace:\t\t" + prunedEvents);
     System.out.println("> Number of constraints in model:\t\t" + numConstraints);
-    System.out.println(
+    /*System.out.println(
         "> Time to generate constraint model:\t\t"
-            + (buildingModeltime / (double) 1000)
-            + " seconds");
+            + (buildingModelTime / (double) 1000)
+            + " seconds");*/
     System.out.println("\n## DATA RACES:");
     System.out.println("  > Number of data race candidates:\t\t" + totalDataRaceCandidates);
+    System.out.println("  > Number of data race candidate locations:\t\t" + totalDataRaceCandidateLocations);
     System.out.println("  > Number of actual data races:\t\t" + totalDataRacePairs);
+    System.out.println("  > Number of actual data race locations:\t\t" + totalDataRacePairLocations);
     System.out.println(
         "  > Time to check all candidates:\t\t"
             + (checkingTimeDataRace / (double) 1000)
