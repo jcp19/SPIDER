@@ -31,43 +31,39 @@ public class RedundantEventPruner {
   // Redundancy Elimination structures
   private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
   private Set<Event> redundantEvents;
-  // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
-  private Map<String, Set<String>> concurrencyContexts;
-  // Map: location,hashCode(TETAthread)-> stack of Threads
-  private Map<String, Stack<String>> stacks;
 
   public RedundantEventPruner(TraceProcessor traceProcessor) {
     redundantSndRcv = new HashSet<>();
     redundantEvents = new HashSet<>();
-    concurrencyContexts = new HashMap<>();
-    stacks = new HashMap<>();
     this.traceProcessor = traceProcessor;
   }
 
-  // TODO: document code, removeRedundantRW is the literall ReX implementation
-  //       removeRedundantMsgs is the extension of ReX to handle distributed systems with
-  //       message passing
+  // TODO: document code
   // TODO: Model Check both algorithms
 
   /**
-   * Removes redundant events for data race detection. Literal implementation the ReX algorithm.
-   * Assumes: 1) the order of the events iterator corresponds to the chronological order of the
-   * events 2) the function getStack in ReX depends only on the current state of teta-loc
+   * Removes redundant events for data race detection. Literal implementation the ReX algorithm
+   * (https://parasol.tamu.edu/~jeff/academic/rex.pdf). Assumes: 1) the order of the events iterator
+   * corresponds to the chronological order of the events 2) the function getStack in ReX depends
+   * only on the current state of teta-loc
    *
    * @return
    */
   public long removeRedundantRW() {
-    long count = 0;
-    EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
+    // ReX auxiliary structures
+    // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
+    Map<String, Set<String>> concurrencyContexts = new HashMap<>();
+    // Map: location,hashCode(TETA-thread)-> stack of Threads
+    Map<String, Stack<String>> stacks = new HashMap<>();
     // Metadata for detecting possible redundant send/receives
     Map<String, Integer> threadCounters = new HashMap<>();
-
+    EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
     // Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) ->
     // stack of pairs SND/RCV
     Map<String, Stack<MessageCausalPair>> socketStacks = new HashMap<>();
-
     // Records for each SND event its corresponding thread counter
     Map<Event, Integer> countersOnEvents = new HashMap<>();
+    long count = 0;
 
     for (String thread : traceProcessor.eventsPerThread.keySet()) {
       threadCounters.put(thread, 0);
@@ -96,7 +92,7 @@ public class RedundantEventPruner {
         case WRITE:
           // MEM Access
           RWEvent rwe = (RWEvent) e;
-          if (checkRedundancy(rwe, thread)) {
+          if (checkRedundancy(concurrencyContexts, stacks, rwe, thread)) {
             // if an event is redundant, remove from the trace
             logger.debug("Event " + e + " is redundant.");
             events.remove();
@@ -113,15 +109,15 @@ public class RedundantEventPruner {
           countersOnEvents.put(e, threadCounters.get(thread));
           break;
         case RCV:
-          SocketEvent rcve = (SocketEvent) e;
-          String messageId = rcve.getMessageId();
-          SocketEvent snde = traceProcessor.sndFromMessageId(messageId);
+          SocketEvent rcvEvent = (SocketEvent) e;
+          String messageId = rcvEvent.getMessageId();
+          SocketEvent sndEvent = traceProcessor.sndFromMessageId(messageId);
           String key =
-              snde.getLineOfCode()
+              sndEvent.getLineOfCode()
                   + ":"
-                  + countersOnEvents.get(snde)
-                  + "::"
-                  + rcve.getLineOfCode()
+                  + countersOnEvents.get(sndEvent)
+                  + ":"
+                  + rcvEvent.getLineOfCode()
                   + ":"
                   + threadCounters.get(thread);
           Stack<MessageCausalPair> s = socketStacks.get(key);
@@ -132,7 +128,7 @@ public class RedundantEventPruner {
           }
 
           if (s.size() >= 2) {
-            redundantSndRcv.add(new CausalPair<>(snde, rcve));
+            redundantSndRcv.add(new CausalPair<>(sndEvent, rcvEvent));
           } else {
             s.push(traceProcessor.msgEvents.get(messageId));
           }
@@ -146,8 +142,6 @@ public class RedundantEventPruner {
           // advance e
           break;
       }
-      // System.out.println("-- Event " + e.getEventId() + " : " + e.toString());
-      // printDebugInfo();
     }
     return count;
   }
@@ -353,8 +347,11 @@ public class RedundantEventPruner {
     }
   }
 
-  private boolean checkRedundancy(RWEvent event, String thread) {
-    String loc = event.getLineOfCode();
+  private boolean checkRedundancy(
+      Map<String, Set<String>> concurrencyContexts,
+      Map<String, Stack<String>> stacks,
+      RWEvent event,
+      String thread) {
     Set<String> concurrencyContext = concurrencyContexts.get(thread);
     String key =
         event.getLineOfCode()
@@ -368,7 +365,6 @@ public class RedundantEventPruner {
     if (stack == null) {
       stack = new Stack<>();
       stacks.put(key, stack);
-
       stack.push(thread);
       return false;
     } else if (stack.contains(thread) || stack.size() == 2) {
@@ -436,11 +432,6 @@ public class RedundantEventPruner {
     return true;
   }
 
-  @Deprecated
-  private static <X, Y> boolean contains2ndTerm(Collection<CausalPair<X, Y>> coll, Y elem) {
-    return getPairWithSameSecondTerm(coll, elem) != null;
-  }
-
   private static <K, V> boolean removeFromMapToLists(Map<K, List<V>> map, K key, V value) {
     List<V> l = map.get(key);
     if (l != null) {
@@ -469,21 +460,5 @@ public class RedundantEventPruner {
     }
 
     return null;
-  }
-
-  @Deprecated
-  public void logDebugInfo() {
-    // TODO: complete
-    StringBuilder logMessage = new StringBuilder();
-    System.out.println("Concurrency contexts:");
-    for (Map.Entry<String, Set<String>> cc : concurrencyContexts.entrySet()) {
-      System.out.println(cc.getKey() + " : " + cc.getValue());
-    }
-
-    System.out.println("Stacks:");
-    System.out.println(stacks.entrySet().toString());
-
-    System.out.println("Redundant events:");
-    System.out.println(redundantEvents.toString());
   }
 }
