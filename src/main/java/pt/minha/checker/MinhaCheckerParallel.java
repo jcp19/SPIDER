@@ -9,9 +9,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.json.JSONException;
 import pt.haslab.taz.TraceProcessor;
-import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
-import pt.minha.checker.stats.Stats;
 
 /** Created by nunomachado on 30/03/17. */
 public class MinhaCheckerParallel {
@@ -49,14 +47,14 @@ public class MinhaCheckerParallel {
     // aggregate partitioned messages to facilitate message race detection
     trace.aggregateAllPartitionedMessages();
 
-    if (cmd.hasOption("d") && cmd.hasOption("r")) {
+    if (cmd.hasOption("r")) {
       // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
-      Stats.redundantEvents = eventPruner.removeRedundantEvents();
-      // Stats.prunedEvents = eventPruner.pruneEvents();
+      Stats.redundantEvents = eventPruner.removeRedundantRW();
+      Stats.prunedEvents = eventPruner.removeRedundantMsgs();
     }
 
-    Solver solver = initSolver();
+    Z3SolverParallel solver = initSolver();
     RaceDetector raceDetector = new RaceDetector(solver, trace);
     raceDetector.generateConstraintModel();
 
@@ -76,10 +74,10 @@ public class MinhaCheckerParallel {
     Stats.printStats();
   }
 
-  public static Solver initSolver() throws IOException {
+  public static Z3SolverParallel initSolver() throws IOException {
     // Solver path is now set to be z3
     String solverPath = "z3";
-    Solver solver = Z3SolverParallel.getInstance();
+    Z3SolverParallel solver = Z3SolverParallel.getInstance();
     solver.init(solverPath);
     return solver;
   }

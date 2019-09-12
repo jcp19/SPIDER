@@ -21,9 +21,7 @@ import pt.haslab.taz.events.RWEvent;
 import pt.haslab.taz.events.SocketEvent;
 import pt.haslab.taz.events.SyncEvent;
 import pt.haslab.taz.events.ThreadCreationEvent;
-import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
-import pt.minha.checker.stats.Stats;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
@@ -35,10 +33,10 @@ class RaceDetector {
   private HashSet<CausalPair<? extends Event, ? extends Event>> msgRaceCandidates;
   // HB model, used to encode message arrival constraints
   private HashMap<SocketEvent, Event> rcvNextEvent;
-  private Solver solver;
+  private Z3SolverParallel solver;
   private TraceProcessor traceProcessor;
 
-  public RaceDetector(Solver solver, TraceProcessor traceProcessor) {
+  public RaceDetector(Z3SolverParallel solver, TraceProcessor traceProcessor) {
     dataRaceCandidates = new HashSet<>();
     msgRaceCandidates = new HashSet<>();
     rcvNextEvent = new HashMap<>();
@@ -83,7 +81,7 @@ class RaceDetector {
             + " candidates)");
 
     long checkingStart = System.currentTimeMillis();
-    dataRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(dataRaceCandidates);
+    dataRaceCandidates = solver.checkRacesParallel(dataRaceCandidates);
     Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
     Stats.totalDataRacePairs = dataRaceCandidates.size();
     Stats.totalDataRacePairLocations = countDataRaces();
@@ -158,12 +156,6 @@ class RaceDetector {
         }
       }
     }
-
-    // DEBUG: print candidate pairs
-    System.out.println("Message Race candidates: ");
-    for (CausalPair<? extends Event, ? extends Event> pair : msgRaceCandidates) {
-      System.out.println("\t" + causalPairToOrderedString(pair));
-    } // */
   }
 
   // TODO: use the same way to order a string as used in `getRacesAsLocationPairs`
@@ -198,10 +190,11 @@ class RaceDetector {
             + " candidates)");
 
     long checkingStart = System.currentTimeMillis();
-    msgRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(msgRaceCandidates);
+    msgRaceCandidates = solver.checkRacesParallel(msgRaceCandidates);
     Stats.checkingTimeMsgRace = System.currentTimeMillis() - checkingStart;
     Stats.totalMsgRacePairs = msgRaceCandidates.size();
 
+    // TODO: use the number of locations instead of number of causalPairs
     System.out.println(
         "\n#Message Race Candidates: "
             + Stats.totalMsgRaceCandidates
@@ -211,8 +204,13 @@ class RaceDetector {
   }
 
   private void prettyPrintDataRaces() {
-    for (CausalPair<? extends Event, ? extends Event> race : dataRaceCandidates) {
-      System.out.println("-- " + causalPairToOrderedString(race));
+    long i = 0;
+    Set<String> pairsOfLocations = getRacesAsLocationPairs(dataRaceCandidates);
+    System.out.println("Data Races:");
+
+    for (String pair : pairsOfLocations) {
+      i++;
+      System.out.println(" > Data Race #" + i + " : " + pair);
     }
   }
 
@@ -286,12 +284,6 @@ class RaceDetector {
         }
       }
     }
-
-    // DEBUG: print candidate pairs
-    System.out.println("Data Race candidates: ");
-    for (CausalPair<? extends Event, ? extends Event> pair : dataRaceCandidates) {
-      System.out.println("\t" + causalPairToOrderedString(pair));
-    } // */
   }
 
   private void genIntraNodeConstraints() throws IOException {
@@ -636,6 +628,7 @@ class RaceDetector {
 
   /**
    * Computes the set of pairs of locations that correspond to races from the set of `CausalPair`s
+   *
    * @param causalPairs
    * @return
    */
@@ -648,7 +641,7 @@ class RaceDetector {
                 causalPair.getFirst().getLineOfCode(), causalPair.getSecond().getLineOfCode()
               };
               Arrays.sort(locations);
-              return locations[0] + locations[1];
+              return "(" + locations[0] + ", " + locations[1] + ")";
             })
         .collect(Collectors.toSet());
   }
