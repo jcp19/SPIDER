@@ -24,27 +24,19 @@ import pt.haslab.taz.utils.Utils;
 
 import static pt.haslab.taz.events.EventType.*;
 
-@Deprecated
 public class RedundantEventPruner {
   private TraceProcessor traceProcessor;
   private static final Logger logger = LoggerFactory.getLogger(RedundantEventPruner.class);
 
   // Redundancy Elimination structures
   private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
-  // Debug data
   private Set<Event> redundantEvents;
-  // Map: thread id -> Msg Context (Counter)
-  private Map<String, Integer> msgContexts;
   // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
   private Map<String, Set<String>> concurrencyContexts;
   // Map: location,hashCode(TETAthread)-> stack of Threads
   private Map<String, Stack<String>> stacks;
-  // Map: str(location pair),hashCode(TETAthread)-> stack of
-  private Map<String, Stack<CausalPair<SocketEvent, SocketEvent>>> msgStacks;
 
   public RedundantEventPruner(TraceProcessor traceProcessor) {
-    msgContexts = new HashMap<>();
-    msgStacks = new HashMap<>();
     redundantSndRcv = new HashSet<>();
     redundantEvents = new HashSet<>();
     concurrencyContexts = new HashMap<>();
@@ -52,19 +44,19 @@ public class RedundantEventPruner {
     this.traceProcessor = traceProcessor;
   }
 
-  // TODO: document code, removeRedundantEvents is the literall ReX implementation
-  //       pruneEvents is the extension of ReX to handle distributed systems with
+  // TODO: document code, removeRedundantRW is the literall ReX implementation
+  //       removeRedundantMsgs is the extension of ReX to handle distributed systems with
   //       message passing
   // TODO: Model Check both algorithms
 
   /**
-   * Removes redundant events for data race detection. Implements the ReX algorithm. Assumes: 1) the
-   * order of the events iterator corresponds to the chronological order of the events 2) the
-   * function getStack in ReX depends only on the current state of teta-loc
+   * Removes redundant events for data race detection. Literal implementation the ReX algorithm.
+   * Assumes: 1) the order of the events iterator corresponds to the chronological order of the
+   * events 2) the function getStack in ReX depends only on the current state of teta-loc
    *
    * @return
    */
-  public long removeRedundantEvents() {
+  public long removeRedundantRW() {
     long count = 0;
     EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
     // Metadata for detecting possible redundant send/receives
@@ -160,7 +152,13 @@ public class RedundantEventPruner {
     return count;
   }
 
-  public long pruneEvents() {
+  /**
+   * Generalize ReX algorithm to distributed systems, making it capable of pruning SND and RCV
+   * events. For maximum effectiveness, this mehtod should be run after `removeRedundantRW`.
+   *
+   * @return
+   */
+  public long removeRedundantMsgs() {
     // can be optimized to check only once every part of the code
     Set<String> checkedThreads = new HashSet<>();
     Set<String> threadsToRemove = new HashSet<>();
@@ -235,14 +233,14 @@ public class RedundantEventPruner {
 
     for (Event e : prunedEvents) {
       removeEventMetadata(e);
-      System.out.println("To Remove: " + e);
+      // System.out.println("To Remove: " + e);
       traceProcessor.eventsPerThread.get(e.getThread()).remove(e);
     }
 
     // remove redundant SND/RCV pairs that have redundant handlers
     for (CausalPair<SocketEvent, SocketEvent> pair : redundantSndRcv) {
-      SocketEvent se = (SocketEvent) pair.getFirst();
-      SocketEvent rcve = (SocketEvent) pair.getSecond();
+      SocketEvent se = pair.getFirst();
+      SocketEvent rcve = pair.getSecond();
 
       String thread = rcve.getThread();
       List<Event> list = traceProcessor.handlerEvents.get(rcve);
@@ -405,7 +403,7 @@ public class RedundantEventPruner {
           openLocks.add((SyncEvent) e);
           break;
         case UNLOCK:
-          if (!openLocks.remove((SyncEvent) e)) {
+          if (!openLocks.remove(e)) {
             // tried to unlock a thread open outside the handler
             return false;
           }
@@ -438,6 +436,7 @@ public class RedundantEventPruner {
     return true;
   }
 
+  @Deprecated
   private static <X, Y> boolean contains2ndTerm(Collection<CausalPair<X, Y>> coll, Y elem) {
     return getPairWithSameSecondTerm(coll, elem) != null;
   }
@@ -472,6 +471,7 @@ public class RedundantEventPruner {
     return null;
   }
 
+  @Deprecated
   public void logDebugInfo() {
     // TODO: complete
     StringBuilder logMessage = new StringBuilder();
