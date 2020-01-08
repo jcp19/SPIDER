@@ -11,9 +11,7 @@ import org.json.JSONException;
 import pt.haslab.taz.TraceProcessor;
 import pt.minha.checker.solver.Z3SolverParallel;
 
-/** Created by nunomachado on 30/03/17. */
-public class MinhaCheckerParallel {
-
+public class CheckerParallel {
   public static void main(String[] args) throws IOException, JSONException {
     Options options = new Options();
     options.addOption(
@@ -24,6 +22,7 @@ public class MinhaCheckerParallel {
     options.addOption("d", "dataRaces", false, "Check for data races.");
     options.addOption("m", "messageRaces", false, "Check for message races.");
     options.addOption("f", "file", true, "File containing the distributed trace.");
+    options.addOption("s", "solver", true, "SMT solver used.");
     CommandLineParser parser = new DefaultParser();
     String traceFilePath = null;
     CommandLine cmd = null;
@@ -51,10 +50,15 @@ public class MinhaCheckerParallel {
       // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
       Stats.redundantEvents = eventPruner.removeRedundantRW();
-      Stats.prunedEvents = eventPruner.removeRedundantMsgs();
+      Stats.redundantMsgEvents = eventPruner.removeRedundantMsgs();
     }
 
-    Z3SolverParallel solver = initSolver();
+    Z3SolverParallel solver;
+    if (cmd.hasOption("s")) {
+      solver = initSolver(cmd.getOptionValue("s"));
+    } else {
+      solver = initSolver("z3");
+    }
     RaceDetector raceDetector = new RaceDetector(solver, trace);
     raceDetector.generateConstraintModel();
 
@@ -74,9 +78,8 @@ public class MinhaCheckerParallel {
     Stats.printStats();
   }
 
-  public static Z3SolverParallel initSolver() throws IOException {
+  public static Z3SolverParallel initSolver(String solverPath) throws IOException {
     // Solver path is now set to be z3
-    String solverPath = "z3";
     Z3SolverParallel solver = Z3SolverParallel.getInstance();
     solver.init(solverPath);
     return solver;

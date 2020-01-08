@@ -29,17 +29,14 @@ public class RedundantEventPruner {
   private static final Logger logger = LoggerFactory.getLogger(RedundantEventPruner.class);
 
   // Redundancy Elimination structures
-  private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
   private Set<Event> redundantEvents;
+  private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
 
   public RedundantEventPruner(TraceProcessor traceProcessor) {
     redundantSndRcv = new HashSet<>();
     redundantEvents = new HashSet<>();
     this.traceProcessor = traceProcessor;
   }
-
-  // TODO: document code
-  // TODO: Model Check both algorithms
 
   /**
    * Removes redundant events for data race detection. Literal implementation the ReX algorithm
@@ -50,24 +47,15 @@ public class RedundantEventPruner {
    * @return
    */
   public long removeRedundantRW() {
-    // ReX auxiliary structures
     // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
     Map<String, Set<String>> concurrencyContexts = new HashMap<>();
-    // Map: location,hashCode(TETA-thread)-> stack of Threads
+    // Map: loc id -> list of he ids of the messages ids and lock ids in the concurrency history
+    // Map<String, Set<String>> concurrencyHistory = new HashMap<>();
+    // Map: key -> list of he ids of the messages ids and lock ids in the concurrency history
     Map<String, Stack<String>> stacks = new HashMap<>();
-    // Metadata for detecting possible redundant send/receives
-    Map<String, Integer> threadCounters = new HashMap<>();
-    EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
-    // Map key (snd_location + thread counter of send + rcv_location + thread counter of rcv) ->
-    // stack of pairs SND/RCV
-    Map<String, Stack<MessageCausalPair>> socketStacks = new HashMap<>();
-    // Records for each SND event its corresponding thread counter
-    Map<Event, Integer> countersOnEvents = new HashMap<>();
-    long count = 0;
 
-    for (String thread : traceProcessor.eventsPerThread.keySet()) {
-      threadCounters.put(thread, 0);
-    }
+    EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
+    long count = 0;
 
     while (events.hasNext()) {
       Event e = events.next();
@@ -80,13 +68,10 @@ public class RedundantEventPruner {
 
       switch (type) {
         case LOCK:
-          SyncEvent le = (SyncEvent) e;
-          Utils.insertInMapToSets(
-              concurrencyContexts, thread, String.valueOf(le.getVariable().hashCode()));
           break;
         case UNLOCK:
           SyncEvent ue = (SyncEvent) e;
-          concurrencyContexts.get(thread).remove(ue.getVariable().hashCode());
+          Utils.insertInMapToSets(concurrencyContexts, thread, ue.getVariable());
           break;
         case READ:
         case WRITE:
@@ -99,39 +84,11 @@ public class RedundantEventPruner {
             redundantEvents.add(e);
             removeEventMetadata(rwe);
             count++;
-          } else {
-            threadCounters.put(thread, threadCounters.get(thread) + 1);
           }
           break;
         case SND:
           SocketEvent se = (SocketEvent) e;
           Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
-          countersOnEvents.put(e, threadCounters.get(thread));
-          break;
-        case RCV:
-          SocketEvent rcvEvent = (SocketEvent) e;
-          String messageId = rcvEvent.getMessageId();
-          SocketEvent sndEvent = traceProcessor.sndFromMessageId(messageId);
-          String key =
-              sndEvent.getLineOfCode()
-                  + ":"
-                  + countersOnEvents.get(sndEvent)
-                  + ":"
-                  + rcvEvent.getLineOfCode()
-                  + ":"
-                  + threadCounters.get(thread);
-          Stack<MessageCausalPair> s = socketStacks.get(key);
-
-          if (s == null) {
-            s = new Stack<>();
-            socketStacks.put(key, s);
-          }
-
-          if (s.size() >= 2) {
-            redundantSndRcv.add(new CausalPair<>(sndEvent, rcvEvent));
-          } else {
-            s.push(traceProcessor.msgEvents.get(messageId));
-          }
           break;
         case CREATE:
           // handles CREATE events the same way it handles SND
@@ -146,6 +103,37 @@ public class RedundantEventPruner {
     return count;
   }
 
+  private boolean checkRedundancy(
+      Map<String, Set<String>> concurrencyContexts,
+      Map<String, Stack<String>> stacks,
+      RWEvent event,
+      String thread) {
+    Set<String> concurrencyContext = concurrencyContexts.get(thread);
+    String key =
+        event.getLineOfCode()
+            + ":"
+            + (concurrencyContext == null ? 0 : concurrencyContext.hashCode())
+            + ":"
+            + event.getType();
+
+    Stack<String> stack = stacks.get(key);
+
+    if (stack == null) {
+      stack = new Stack<>();
+      stacks.put(key, stack);
+      stack.push(thread);
+      return false;
+    } else if (stack.contains(thread) || stack.size() == 2) {
+      // if the stack already contains the thread or is full
+      return true;
+    } else if (stack.size() == 1) {
+      // Stack has size 1 and does not contain the thread
+      stack.push(thread);
+      return false;
+    }
+    return false;
+  }
+
   /**
    * Generalize ReX algorithm to distributed systems, making it capable of pruning SND and RCV
    * events. For maximum effectiveness, this mehtod should be run after `removeRedundantRW`.
@@ -155,7 +143,6 @@ public class RedundantEventPruner {
   public long removeRedundantMsgs() {
     // can be optimized to check only once every part of the code
     Set<String> checkedThreads = new HashSet<>();
-    Set<String> threadsToRemove = new HashSet<>();
     Set<Event> prunedEvents = new HashSet<>();
 
     for (String thread : traceProcessor.eventsPerThread.keySet()) {
@@ -183,7 +170,6 @@ public class RedundantEventPruner {
               prunedEvents.add(tce);
               prunedEvents.addAll(traceProcessor.eventsPerThread.get(child));
               checkedThreads.add(child);
-              threadsToRemove.add(child);
 
               if (join != null) {
                 prunedEvents.add(join);
@@ -197,11 +183,10 @@ public class RedundantEventPruner {
                 getPairWithSameSecondTerm(redundantSndRcv, (SocketEvent) e);
 
             // if the send/rcv is redundant and there is no message handler
-
-            if (handler == null && pair != null) {
+            if ((handler == null || canRemoveHandler(handler)) && pair != null) {
               // removeEventMetadata(e);
-              // prunedEvents.add(pair.getFirst());
-              // prunedEvents.add(pair.getSecond());
+              // redundantMsgEvents.add(pair.getFirst());
+              // redundantMsgEvents.add(pair.getSecond());
               redundantSndRcv.remove(pair);
             }
             break;
@@ -227,7 +212,7 @@ public class RedundantEventPruner {
 
     for (Event e : prunedEvents) {
       removeEventMetadata(e);
-      // System.out.println("To Remove: " + e);
+      System.out.println("To Remove: " + e);
       traceProcessor.eventsPerThread.get(e.getThread()).remove(e);
     }
 
@@ -252,6 +237,7 @@ public class RedundantEventPruner {
         events.remove(se);
         removeEventMetadata(rcve);
         removeEventMetadata(se);
+        System.out.println("To remove Message" + se.getMessageId());
 
         // trace.handlerEvents.remove(pair.getSecond());
         // trace.msgEvents.remove(pair.getFirst().getMessageId());
@@ -260,6 +246,10 @@ public class RedundantEventPruner {
     }
 
     return prunedEvents.size();
+  }
+
+  private boolean canRemoveHandler() {
+    return true;
   }
 
   /**
@@ -347,37 +337,6 @@ public class RedundantEventPruner {
     }
   }
 
-  private boolean checkRedundancy(
-      Map<String, Set<String>> concurrencyContexts,
-      Map<String, Stack<String>> stacks,
-      RWEvent event,
-      String thread) {
-    Set<String> concurrencyContext = concurrencyContexts.get(thread);
-    String key =
-        event.getLineOfCode()
-            + ":"
-            + (concurrencyContext == null ? 0 : concurrencyContext.hashCode())
-            + ":"
-            + event.getType();
-
-    Stack<String> stack = stacks.get(key);
-
-    if (stack == null) {
-      stack = new Stack<>();
-      stacks.put(key, stack);
-      stack.push(thread);
-      return false;
-    } else if (stack.contains(thread) || stack.size() == 2) {
-      // if the stack already contains the thread or is full
-      return true;
-    } else if (stack.size() == 1) {
-      // Stack has size 1 and does not contain the thread
-      stack.push(thread);
-      return false;
-    }
-    return false;
-  }
-
   private boolean canRemoveHandler(List<Event> handler) {
     Set<SyncEvent> openLocks = new HashSet<>();
     for (Event e : handler) {
@@ -385,6 +344,8 @@ public class RedundantEventPruner {
       if (redundantEvents.contains(e)) {
         continue;
       }
+      // If a block has any instruction capable of inducing a specific ordering of events,
+      // it cannot be removed
       switch (type) {
         case SND:
         case RCV:
@@ -414,6 +375,8 @@ public class RedundantEventPruner {
   private boolean canRemoveBlock(Iterable<Event> events) {
     for (Event e : events) {
       EventType type = e.getType();
+      // If a block has any instruction capable of inducing a specific ordering of events,
+      // it cannot be removed
       if (type == SND
           || type == RCV
           || type == WRITE
