@@ -394,7 +394,7 @@ class RaceDetector {
     solver.writeComment("SEND-RECEIVE CONSTRAINTS");
     for (MessageCausalPair pair : traceProcessor.msgEvents.values()) {
 
-      if (pair.getSnd() == null && pair.getRcv() == null) {
+      if (pair.getSnd() == null || pair.getRcv() == null) {
         continue;
       }
 
