@@ -31,10 +31,19 @@ public class RedundantEventPruner {
   // Redundancy Elimination structures
   private Set<Event> redundantEvents;
   private Set<CausalPair<SocketEvent, SocketEvent>> redundantSndRcv;
+  // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
+  private Map<String, Set<String>> concurrencyContexts;
+  // Map: loc id -> concurrency history of location
+  private Map<String, Set<String>> concurrencyHistories;
+  // Map: key -> list of he ids of the messages ids and lock ids in the concurrency history
+  private Map<String, Stack<String>> stacks;
 
   public RedundantEventPruner(TraceProcessor traceProcessor) {
     redundantSndRcv = new HashSet<>();
     redundantEvents = new HashSet<>();
+    concurrencyContexts = new HashMap<>();
+    concurrencyHistories = new HashMap<>();
+    stacks = new HashMap<>();
     this.traceProcessor = traceProcessor;
   }
 
@@ -43,21 +52,18 @@ public class RedundantEventPruner {
    * (https://parasol.tamu.edu/~jeff/academic/rex.pdf). Assumes: 1) the order of the event iterator
    * matches the partial order defined by the HB relation 2) the function getStack in ReX depends
    * only on the current concurrency context and location (the concurrency history is not important)
-   * This is based on my interpretation of the ReX algorithm, whose presentation in the paper is
-   * wrong.
+   * This is based on my interpretation of the ReX algorithm, whose presentation in the paper is not
+   * clear. This version of the algorithm is not paralelizable.
    *
    * @return the number of removed events
    */
   public long removeRedundantRW() {
-    // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
-    Map<String, Set<String>> concurrencyContexts = new HashMap<>();
-    // Map: loc id -> list of he ids of the messages ids and lock ids in the concurrency history
-    // Map<String, Set<String>> concurrencyHistory = new HashMap<>();
-    // Map: key -> list of he ids of the messages ids and lock ids in the concurrency history
-    Map<String, Stack<String>> stacks = new HashMap<>();
-
     EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
     long count = 0;
+
+    for (String t : traceProcessor.eventsPerThread.keySet()) {
+      concurrencyContexts.put(t, new HashSet<>());
+    }
 
     while (events.hasNext()) {
       Event e = events.next();
@@ -79,7 +85,7 @@ public class RedundantEventPruner {
         case WRITE:
           // MEM Access
           RWEvent rwe = (RWEvent) e;
-          if (checkRedundancy(concurrencyContexts, stacks, rwe, thread)) {
+          if (checkRedundancyRW(rwe)) {
             // if an event is redundant, remove from the trace
             logger.debug("Event " + e + " is redundant.");
             events.remove();
@@ -93,7 +99,8 @@ public class RedundantEventPruner {
           Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
           break;
         case CREATE:
-          // handles CREATE events the same way it handles SND
+          // handles CREATE events the same way it handles SND because it also introduces
+          // an outgoing HB edge
           ThreadCreationEvent tse = (ThreadCreationEvent) e;
           Utils.insertInMapToSets(concurrencyContexts, thread, tse.getChildThread());
           break;
@@ -105,25 +112,12 @@ public class RedundantEventPruner {
     return count;
   }
 
-  private boolean checkRedundancy(
-      Map<String, Set<String>> concurrencyContexts,
-      Map<String, Stack<String>> stacks,
-      RWEvent event,
-      String thread) {
+  private boolean checkRedundancyRW(RWEvent event) {
+    String thread = event.getThread();
     Set<String> concurrencyContext = concurrencyContexts.get(thread);
+    Stack<String> stack = getStack(event.getLineOfCode(), concurrencyContext);
 
-    String key =
-        event.getLineOfCode()
-            + ":"
-            + (concurrencyContext == null ? 0 : concurrencyContext.hashCode())
-            + ":"
-            + event.getType();
-
-    Stack<String> stack = stacks.get(key);
-
-    if (stack == null) {
-      stack = new Stack<>();
-      stacks.put(key, stack);
+    if (stack.empty()) {
       stack.push(thread);
       return false;
     } else if (stack.contains(thread) || stack.size() == 2) {
@@ -135,6 +129,27 @@ public class RedundantEventPruner {
       return false;
     }
     return false;
+  }
+
+  private Stack<String> getStack(String loc, Set<String> concurrencyContext) {
+    Set<String> concurrencyHistory = concurrencyHistories.get(loc);
+    if (concurrencyHistory == null) {
+      concurrencyHistory = new HashSet<>();
+      concurrencyHistories.put(loc, concurrencyHistory);
+    }
+
+    // If a statement can produce more than one event, than this line shoudld change.
+    // The key should be extended with some string which can differentiate between events
+    // produced on the same statement.
+    String key = "loc:" + loc + ":" + concurrencyContext.hashCode();
+    Stack<String> stack = stacks.get(key);
+
+    if (stack == null) {
+      stack = new Stack<>();
+      stacks.put(key, stack);
+    }
+
+    return stack;
   }
 
   /**
