@@ -40,11 +40,15 @@ public class RedundantEventPruner {
 
   /**
    * Removes redundant events for data race detection. Literal implementation the ReX algorithm
-   * (https://parasol.tamu.edu/~jeff/academic/rex.pdf). Assumes: 1) the order of the events iterator
-   * corresponds to the chronological order of the events 2) the function getStack in ReX depends
-   * only on the current state of teta-loc
+   * (https://parasol.tamu.edu/~jeff/academic/rex.pdf).
+   * Assumes:
+   *   1) the order of the event iterator matches the partial order defined by the HB relation
+   *   2) the function getStack in ReX depends only on the current concurrency context and location
+   *      (the concurrency history is not important)
+   * This is based on my interpretation of the ReX algorithm, whose presentation in the paper
+   * is wrong.
    *
-   * @return
+   * @return the number of removed events
    */
   public long removeRedundantRW() {
     // Map: thread id -> list of he ids of the messages ids and lock ids in the concurrency context
@@ -109,6 +113,7 @@ public class RedundantEventPruner {
       RWEvent event,
       String thread) {
     Set<String> concurrencyContext = concurrencyContexts.get(thread);
+    //
     String key =
         event.getLineOfCode()
             + ":"
