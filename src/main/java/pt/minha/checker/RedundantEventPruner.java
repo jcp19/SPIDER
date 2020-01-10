@@ -40,13 +40,11 @@ public class RedundantEventPruner {
 
   /**
    * Removes redundant events for data race detection. Literal implementation the ReX algorithm
-   * (https://parasol.tamu.edu/~jeff/academic/rex.pdf).
-   * Assumes:
-   *   1) the order of the event iterator matches the partial order defined by the HB relation
-   *   2) the function getStack in ReX depends only on the current concurrency context and location
-   *      (the concurrency history is not important)
-   * This is based on my interpretation of the ReX algorithm, whose presentation in the paper
-   * is wrong.
+   * (https://parasol.tamu.edu/~jeff/academic/rex.pdf). Assumes: 1) the order of the event iterator
+   * matches the partial order defined by the HB relation 2) the function getStack in ReX depends
+   * only on the current concurrency context and location (the concurrency history is not important)
+   * This is based on my interpretation of the ReX algorithm, whose presentation in the paper is
+   * wrong.
    *
    * @return the number of removed events
    */
@@ -97,7 +95,7 @@ public class RedundantEventPruner {
         case CREATE:
           // handles CREATE events the same way it handles SND
           ThreadCreationEvent tse = (ThreadCreationEvent) e;
-          Utils.insertInMapToSets(concurrencyContexts, thread, String.valueOf(tse.hashCode()));
+          Utils.insertInMapToSets(concurrencyContexts, thread, tse.getChildThread());
           break;
         default:
           // advance e
@@ -113,7 +111,7 @@ public class RedundantEventPruner {
       RWEvent event,
       String thread) {
     Set<String> concurrencyContext = concurrencyContexts.get(thread);
-    //
+
     String key =
         event.getLineOfCode()
             + ":"
@@ -145,7 +143,15 @@ public class RedundantEventPruner {
    *
    * @return
    */
+  // TODO: split this method in multiple methods
+  // TODO: check its validity
+  // TODO: update javadoc
+  // TODO: use bool to force the removal of msgs without handlers
   public long removeRedundantMsgs() {
+    return removeRedundantMsgs(false);
+  }
+
+  public long removeRedundantMsgs(boolean removeMsgsWithoutHandler) {
     // can be optimized to check only once every part of the code
     Set<String> checkedThreads = new HashSet<>();
     Set<Event> prunedEvents = new HashSet<>();
@@ -261,6 +267,7 @@ public class RedundantEventPruner {
    * Removes the data associated with this event from the Trace Processor auxiliary structures. Does
    * NOT remove events from eventsPerThread.
    */
+  // TODO: split this method in multiple methods
   private void removeEventMetadata(Event e) {
     if (e == null) {
       return;
