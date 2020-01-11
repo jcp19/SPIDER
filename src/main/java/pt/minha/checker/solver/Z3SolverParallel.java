@@ -2,7 +2,7 @@ package pt.minha.checker.solver;
 
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.events.*;
-import pt.minha.checker.stats.Stats;
+import pt.minha.checker.Stats;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Z3SolverParallel implements Solver {
   private static Z3SolverParallel instance = null;
   private static FileWriter outfile;
-  private static final String MODEL_FILENAME = "modelParallel.txt";
+  private static final String MODEL_FILENAME = "modelParallel.smt2";
   private static int CORES;
   private static Process[] z3Processes;
   private static BufferedReader[] readers;

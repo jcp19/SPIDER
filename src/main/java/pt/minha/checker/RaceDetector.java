@@ -25,8 +25,6 @@ import pt.minha.checker.solver.Z3SolverParallel;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
-// TODO: reagroup methods logically
-
 class RaceDetector {
   private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
   private HashSet<CausalPair<? extends Event, ? extends Event>> dataRaceCandidates;
@@ -102,13 +100,18 @@ class RaceDetector {
    * @throws IOException
    */
   public void genMsgRaceCandidates() throws IOException {
-    List<MessageCausalPair> list = new ArrayList<>(traceProcessor.msgEvents.values());
+    List<MessageCausalPair> list = new ArrayList<>(traceProcessor.sndRcvPairs.values());
     ListIterator<MessageCausalPair> pairIterator_i = list.listIterator(0);
     ListIterator<MessageCausalPair> pairIterator_j;
 
     solver.writeComment("SOCKET CHANNEL CONSTRAINTS");
     while (pairIterator_i.hasNext()) {
-      SocketEvent rcv1 = pairIterator_i.next().getRcv();
+
+      // Notice here that we are assuming that the collected trace
+      // is agnostic of network partitioning. As such, we obtain only the first
+      // element in the RCV events list for a message. This is true for all
+      // the code in this class.
+      SocketEvent rcv1 = pairIterator_i.next().getRcv(0);
 
       if (rcv1 == null) {
         continue;
@@ -118,7 +121,7 @@ class RaceDetector {
       pairIterator_j = list.listIterator(pairIterator_i.nextIndex());
 
       while (pairIterator_j.hasNext()) {
-        SocketEvent rcv2 = pairIterator_j.next().getRcv();
+        SocketEvent rcv2 = pairIterator_j.next().getRcv(0);
         if (rcv2 == null) {
           continue;
         }
@@ -126,8 +129,8 @@ class RaceDetector {
         if (rcv1.conflictsWith(rcv2)) {
           // make a pair with SND events because
           // two messages a and b are racing if RCVa || SNDb
-          SocketEvent snd1 = traceProcessor.msgEvents.get(rcv1.getMessageId()).getSnd();
-          SocketEvent snd2 = traceProcessor.msgEvents.get(rcv2.getMessageId()).getSnd();
+          SocketEvent snd1 = traceProcessor.sndRcvPairs.get(rcv1.getMessageId()).getSnd(0);
+          SocketEvent snd2 = traceProcessor.sndRcvPairs.get(rcv2.getMessageId()).getSnd(0);
           CausalPair<SocketEvent, SocketEvent> raceCandidate;
 
           if (rcv1.getEventId() < rcv2.getEventId()) {
@@ -219,8 +222,8 @@ class RaceDetector {
       // translate SND events to their respective RCV events
       SocketEvent snd1 = (SocketEvent) conf.getFirst();
       SocketEvent snd2 = (SocketEvent) conf.getSecond();
-      SocketEvent rcv1 = traceProcessor.msgEvents.get(snd1.getMessageId()).getRcv();
-      SocketEvent rcv2 = traceProcessor.msgEvents.get(snd2.getMessageId()).getRcv();
+      SocketEvent rcv1 = traceProcessor.sndRcvPairs.get(snd1.getMessageId()).getRcv(0);
+      SocketEvent rcv2 = traceProcessor.sndRcvPairs.get(snd2.getMessageId()).getRcv(0);
       CausalPair<SocketEvent, SocketEvent> rcv_conf = new CausalPair<>(rcv1, rcv2);
       System.out.println("~~ " + causalPairToOrderedString(rcv_conf));
 
@@ -392,21 +395,21 @@ class RaceDetector {
   private void genSendReceiveConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate communication constraints");
     solver.writeComment("SEND-RECEIVE CONSTRAINTS");
-    for (MessageCausalPair pair : traceProcessor.msgEvents.values()) {
+    for (MessageCausalPair pair : traceProcessor.sndRcvPairs.values()) {
 
-      if (pair.getSnd() == null || pair.getRcv() == null) {
+      if (pair.getSnd(0) == null || pair.getRcv(0) == null) {
         continue;
       }
 
-      SocketEvent rcv = pair.getRcv();
+      SocketEvent rcv = pair.getRcv(0);
       String cnst = "";
 
       // if there is a message handler, order SND with HANDLERBEGIN instead of RCV
       if (!traceProcessor.handlerEvents.containsKey(rcv)) {
-        cnst = solver.cLt(pair.getSnd().toString(), pair.getRcv().toString());
+        cnst = solver.cLt(pair.getSnd(0).toString(), pair.getRcv(0).toString());
       } else {
         Event handlerbegin = traceProcessor.handlerEvents.get(rcv).get(0);
-        cnst = solver.cLt(pair.getSnd().toString(), handlerbegin.toString());
+        cnst = solver.cLt(pair.getSnd(0).toString(), handlerbegin.toString());
       }
 
       solver.writeConst(solver.postNamedAssert(cnst, "COM"));
