@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class MinhaCheckerParallelTest {
+class CheckerParallelTest {
 
   // Even though this code does not belong to this library,
   // it is important to make sure it gives the intended functionality.

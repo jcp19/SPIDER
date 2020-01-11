@@ -50,7 +50,7 @@ public class CheckerParallel {
       // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
       Stats.redundantEvents = eventPruner.removeRedundantRW();
-      Stats.redundantMsgEvents = eventPruner.removeRedundantMsgs();
+      Stats.redundantMsgEvents = eventPruner.removeRedundantInterThreadEvents();
     }
 
     Z3SolverParallel solver;
@@ -59,6 +59,7 @@ public class CheckerParallel {
     } else {
       solver = initSolver("z3");
     }
+
     RaceDetector raceDetector = new RaceDetector(solver, trace);
     raceDetector.generateConstraintModel();
 
