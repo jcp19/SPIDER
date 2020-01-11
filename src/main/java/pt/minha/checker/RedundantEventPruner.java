@@ -160,8 +160,6 @@ public class RedundantEventPruner {
    *
    * @return the number of removed events
    */
-  // TODO: split this method in multiple methods
-  // TODO: update javadoc
   public long removeRedundantInterThreadEvents(boolean removeMsgsWithoutHandler) {
     // can be optimized to check only once every part of the code
     Set<String> checkedThreads = new HashSet<>();
@@ -259,32 +257,20 @@ public class RedundantEventPruner {
 
   /**
    * Removes the data associated with this event from the Trace Processor auxiliary structures. Does
-   * NOT remove events from eventsPerThread.
+   * NOT remove events from eventsPerThread. This operation is idempotent.
    */
-  // TODO: split this method in multiple methods
   private void removeEventMetadata(Event e) {
     if (e == null) {
       return;
     }
+
     String var;
     EventType type = e.getType();
     String thread = e.getThread();
     switch (type) {
       case SND:
-        // removes both SND and RCV from msgEvents
-        SocketEvent socketEvent = (SocketEvent) e;
-        String msgId = socketEvent.getMessageId();
-        traceProcessor.sndRcvPairs.remove(msgId);
-        break;
       case RCV:
-        // remove msg handler
-        SocketEvent rcvEvent = (SocketEvent) e;
-        List<Event> handler = traceProcessor.handlerEvents.remove(rcvEvent);
-        if (handler != null) {
-          for (Event x : handler) {
-            removeEventMetadata(x);
-          }
-        }
+        removeEventMetadataAux((SocketEvent) e);
         break;
       case CREATE:
         traceProcessor.forkEvents.get(thread).remove(e);
@@ -294,24 +280,7 @@ public class RedundantEventPruner {
         break;
       case LOCK:
       case UNLOCK:
-        SyncEvent syncEvent = (SyncEvent) e;
-        var = syncEvent.getVariable();
-        List<CausalPair<SyncEvent, SyncEvent>> pairs = traceProcessor.lockEvents.get(var);
-        if (pairs != null) {
-          CausalPair<SyncEvent, SyncEvent> res = null;
-          for (CausalPair<SyncEvent, SyncEvent> pair : pairs) {
-            SyncEvent fst = pair.getFirst();
-            SyncEvent snd = pair.getSecond();
-            if (syncEvent.equals(fst) || syncEvent.equals(snd)) {
-              res = pair;
-              break;
-            }
-          }
-
-          if (res != null) {
-            pairs.remove(res);
-          }
-        }
+        removeEventMetadataAux((SyncEvent) e);
         break;
       case READ:
         RWEvent readEvent = (RWEvent) e;
@@ -339,6 +308,66 @@ public class RedundantEventPruner {
     for (List<Event> l : traceProcessor.handlerEvents.values()) {
       if (l.remove(e)) {
         return;
+      }
+    }
+  }
+
+  /**
+   * This methods is responsible for removing metadata associated with SND and RCV events.
+   *
+   * @param e - the event whose metadata is to be prunned
+   */
+  private void removeEventMetadataAux(SocketEvent e) {
+    // Did not call this method removeEventMetadata to avoid erroneous invocations -> the method
+    // removeEventMetada runs necessary operations for all events. Didn't want to make people
+    // call removeEventMetadataAux by mistake so I named it this way.
+    switch (e.getType()) {
+      case SND:
+        // removes both SND and RCV from msgEvents
+        String msgId = e.getMessageId();
+        traceProcessor.sndRcvPairs.remove(msgId);
+        break;
+      case RCV:
+        // remove msg handler
+        List<Event> handler = traceProcessor.handlerEvents.remove(e);
+        if (handler != null) {
+          for (Event x : handler) {
+            removeEventMetadata(x);
+          }
+        }
+        break;
+      default:
+        throw new RuntimeException("Removing event metadata with the wrong method");
+    }
+  }
+
+  /**
+   * This methods is responsible for removing metadata associated with LOCK and UNLOCK events.
+   *
+   * @param e - the event whose metadata is to be prunned
+   */
+  private void removeEventMetadataAux(SyncEvent e) {
+    EventType type = e.getType();
+
+    if (e.equals(LOCK) && e.equals(UNLOCK)) {
+      throw new RuntimeException("Removing event metadata with the wrong method");
+    }
+
+    String var = e.getVariable();
+    List<CausalPair<SyncEvent, SyncEvent>> pairs = traceProcessor.lockEvents.get(var);
+    if (pairs != null) {
+      CausalPair<SyncEvent, SyncEvent> res = null;
+      for (CausalPair<SyncEvent, SyncEvent> pair : pairs) {
+        SyncEvent fst = pair.getFirst();
+        SyncEvent snd = pair.getSecond();
+        if (e.equals(fst) || e.equals(snd)) {
+          res = pair;
+          break;
+        }
+      }
+
+      if (res != null) {
+        pairs.remove(res);
       }
     }
   }
@@ -397,7 +426,7 @@ public class RedundantEventPruner {
           || type == WAIT) {
         return false;
       } else if (type == CREATE) {
-        // TODO: do the same thing for the SND events
+        // Possible improvement: do the same thing for the SND events
         ThreadCreationEvent tce = (ThreadCreationEvent) e;
         if (!canRemoveBlock(traceProcessor.eventsPerThread.get(tce.getChildThread()))) {
           return false;
