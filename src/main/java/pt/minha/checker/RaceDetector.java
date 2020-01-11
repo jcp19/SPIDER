@@ -25,8 +25,6 @@ import pt.minha.checker.solver.Z3SolverParallel;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
-// TODO: reagroup methods logically
-
 class RaceDetector {
   private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
   private HashSet<CausalPair<? extends Event, ? extends Event>> dataRaceCandidates;
