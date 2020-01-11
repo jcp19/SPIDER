@@ -1,20 +1,23 @@
 package pt.minha.checker;
 
+import org.junit.jupiter.api.Test;
 import pt.haslab.taz.events.CatIterator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.SortedSet;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class MinhaCheckerParallelTest {
+class CheckerParallelTest {
 
   // Even though this code does not belong to this library,
   // it is important to make sure it gives the intended functionality.
-  @org.junit.jupiter.api.Test
+  @Test
   void testCatIterator() {
     List<Integer> a = IntStream.of(1, 4, 7).boxed().collect(Collectors.toList());
     List<Integer> b = IntStream.of(2, 5, 8).boxed().collect(Collectors.toList());
@@ -28,6 +31,11 @@ class MinhaCheckerParallelTest {
     List<Integer> concatList = new ArrayList<>();
     catIterator.forEachRemaining(concatList::add);
 
-    assertTrue(concatList.equals(expectedResult));
+    assertEquals(concatList, expectedResult);
+  }
+
+  @Test
+  void testSortedSetToList() {
+    // TODO
   }
 }

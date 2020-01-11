@@ -9,13 +9,9 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.json.JSONException;
 import pt.haslab.taz.TraceProcessor;
-import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
-import pt.minha.checker.stats.Stats;
 
-/** Created by nunomachado on 30/03/17. */
-public class MinhaCheckerParallel {
-
+public class CheckerParallel {
   public static void main(String[] args) throws IOException, JSONException {
     Options options = new Options();
     options.addOption(
@@ -26,6 +22,7 @@ public class MinhaCheckerParallel {
     options.addOption("d", "dataRaces", false, "Check for data races.");
     options.addOption("m", "messageRaces", false, "Check for message races.");
     options.addOption("f", "file", true, "File containing the distributed trace.");
+    options.addOption("s", "solver", true, "SMT solver used.");
     CommandLineParser parser = new DefaultParser();
     String traceFilePath = null;
     CommandLine cmd = null;
@@ -49,18 +46,25 @@ public class MinhaCheckerParallel {
     // aggregate partitioned messages to facilitate message race detection
     trace.aggregateAllPartitionedMessages();
 
-    if (cmd.hasOption("d") && cmd.hasOption("r")) {
+    if (cmd.hasOption("r")) {
       // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
-      Stats.redundantEvents = eventPruner.removeRedundantEvents();
-      Stats.prunedEvents = eventPruner.pruneEvents();
+      Stats.redundantEvents = eventPruner.removeRedundantRW();
+      Stats.redundantMsgEvents = eventPruner.removeRedundantInterThreadEvents();
     }
 
-    Solver solver = initSolver();
+    Z3SolverParallel solver;
+    if (cmd.hasOption("s")) {
+      solver = initSolver(cmd.getOptionValue("s"));
+    } else {
+      solver = initSolver("z3");
+    }
+
     RaceDetector raceDetector = new RaceDetector(solver, trace);
     raceDetector.generateConstraintModel();
-    // raceDetector.checkConflicts();
 
+    // Instead of using 'raceDetector.checkConflicts()' to check all kinds of conflicts, it
+    // executes the analysis for data races and message races depending on the program flags
     if (cmd.hasOption("d")) {
       raceDetector.genDataRaceCandidates();
       raceDetector.computeActualDataRaces();
@@ -75,10 +79,9 @@ public class MinhaCheckerParallel {
     Stats.printStats();
   }
 
-  public static Solver initSolver() throws IOException {
+  public static Z3SolverParallel initSolver(String solverPath) throws IOException {
     // Solver path is now set to be z3
-    String solverPath = "z3";
-    Solver solver = Z3SolverParallel.getInstance();
+    Z3SolverParallel solver = Z3SolverParallel.getInstance();
     solver.init(solverPath);
     return solver;
   }

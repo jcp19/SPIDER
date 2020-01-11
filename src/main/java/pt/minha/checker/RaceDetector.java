@@ -2,11 +2,16 @@ package pt.minha.checker;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Set;
 import java.util.SortedSet;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
@@ -16,21 +21,20 @@ import pt.haslab.taz.events.RWEvent;
 import pt.haslab.taz.events.SocketEvent;
 import pt.haslab.taz.events.SyncEvent;
 import pt.haslab.taz.events.ThreadCreationEvent;
-import pt.minha.checker.solver.Solver;
 import pt.minha.checker.solver.Z3SolverParallel;
-import pt.minha.checker.stats.Stats;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 
-public class RaceDetector {
+class RaceDetector {
+  private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
   private HashSet<CausalPair<? extends Event, ? extends Event>> dataRaceCandidates;
   private HashSet<CausalPair<? extends Event, ? extends Event>> msgRaceCandidates;
   // HB model, used to encode message arrival constraints
   private HashMap<SocketEvent, Event> rcvNextEvent;
-  private Solver solver;
+  private Z3SolverParallel solver;
   private TraceProcessor traceProcessor;
 
-  public RaceDetector(Solver solver, TraceProcessor traceProcessor) {
+  public RaceDetector(Z3SolverParallel solver, TraceProcessor traceProcessor) {
     dataRaceCandidates = new HashSet<>();
     msgRaceCandidates = new HashSet<>();
     rcvNextEvent = new HashMap<>();
@@ -39,11 +43,12 @@ public class RaceDetector {
   }
 
   public void generateConstraintModel() throws IOException {
-    // TODO: Log time instead of adding it to stats
     long modelStart = System.currentTimeMillis();
     genIntraNodeConstraints();
     genInterNodeConstraints();
-    Stats.buildingModeltime = System.currentTimeMillis() - modelStart;
+    double buildingModelTime = System.currentTimeMillis() - modelStart;
+    logger.info(
+        "Time to generate constraint model: " + (buildingModelTime / (double) 1000) + " seconds");
   }
 
   public void checkConflicts() throws IOException {
@@ -54,8 +59,8 @@ public class RaceDetector {
   }
 
   /**
-   * Computes which of the data race candidates are actually data races.
-   * Must run genDataRaceCandidates() before.
+   * Computes which of the data race candidates are actually data races. Must run
+   * genDataRaceCandidates() before.
    */
   public void computeActualDataRaces() {
     if (dataRaceCandidates.isEmpty()) {
@@ -67,15 +72,17 @@ public class RaceDetector {
     }
 
     Stats.totalDataRaceCandidates = dataRaceCandidates.size();
+    Stats.totalDataRaceCandidateLocations = countDataRaces();
     System.out.println(
         "\n[MinhaChecker] Start data race checking ("
             + Stats.totalDataRaceCandidates
             + " candidates)");
 
     long checkingStart = System.currentTimeMillis();
-    dataRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(dataRaceCandidates);
+    dataRaceCandidates = solver.checkRacesParallel(dataRaceCandidates);
     Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
     Stats.totalDataRacePairs = dataRaceCandidates.size();
+    Stats.totalDataRacePairLocations = countDataRaces();
 
     System.out.println(
         "\n#Data Race Candidates: "
@@ -93,28 +100,37 @@ public class RaceDetector {
    * @throws IOException
    */
   public void genMsgRaceCandidates() throws IOException {
-    List<MessageCausalPair> list = new ArrayList<>(traceProcessor.msgEvents.values());
+    List<MessageCausalPair> list = new ArrayList<>(traceProcessor.sndRcvPairs.values());
     ListIterator<MessageCausalPair> pairIterator_i = list.listIterator(0);
     ListIterator<MessageCausalPair> pairIterator_j;
 
     solver.writeComment("SOCKET CHANNEL CONSTRAINTS");
     while (pairIterator_i.hasNext()) {
-      SocketEvent rcv1 = pairIterator_i.next().getRcv();
 
-      if (rcv1 == null) continue;
+      // Notice here that we are assuming that the collected trace
+      // is agnostic of network partitioning. As such, we obtain only the first
+      // element in the RCV events list for a message. This is true for all
+      // the code in this class.
+      SocketEvent rcv1 = pairIterator_i.next().getRcv(0);
+
+      if (rcv1 == null) {
+        continue;
+      }
 
       // advance iterator to have two different pairs
       pairIterator_j = list.listIterator(pairIterator_i.nextIndex());
 
       while (pairIterator_j.hasNext()) {
-        SocketEvent rcv2 = pairIterator_j.next().getRcv();
-        if (rcv2 == null) continue;
+        SocketEvent rcv2 = pairIterator_j.next().getRcv(0);
+        if (rcv2 == null) {
+          continue;
+        }
 
         if (rcv1.conflictsWith(rcv2)) {
           // make a pair with SND events because
           // two messages a and b are racing if RCVa || SNDb
-          SocketEvent snd1 = traceProcessor.msgEvents.get(rcv1.getMessageId()).getSnd();
-          SocketEvent snd2 = traceProcessor.msgEvents.get(rcv2.getMessageId()).getSnd();
+          SocketEvent snd1 = traceProcessor.sndRcvPairs.get(rcv1.getMessageId()).getSnd(0);
+          SocketEvent snd2 = traceProcessor.sndRcvPairs.get(rcv2.getMessageId()).getSnd(0);
           CausalPair<SocketEvent, SocketEvent> raceCandidate;
 
           if (rcv1.getEventId() < rcv2.getEventId()) {
@@ -133,23 +149,21 @@ public class RaceDetector {
             String cnst;
             // check trace order of SND, as the iterator does not traverse the events
             // according to the program order
-            if (snd1.getEventId() < snd2.getEventId())
+            if (snd1.getEventId() < snd2.getEventId()) {
               cnst = solver.cLt(rcv1.toString(), snd2.toString());
-            else cnst = solver.cLt(rcv2.toString(), snd1.toString());
+            } else {
+              cnst = solver.cLt(rcv2.toString(), snd1.toString());
+            }
             solver.writeConst(solver.postNamedAssert(cnst, "TCP"));
           }
         }
       }
     }
-
-    // DEBUG: print candidate pairs
-    System.out.println("Message Race candidates: ");
-    for (CausalPair<? extends Event, ? extends Event> pair : msgRaceCandidates) {
-      System.out.println("\t" + orderedToString(pair));
-    } // */
   }
 
-  static String orderedToString(CausalPair<? extends Event, ? extends Event> pair) {
+  // TODO: use the same way to order a string as used in `getRacesAsLocationPairs`
+  private static String causalPairToOrderedString(
+      CausalPair<? extends Event, ? extends Event> pair) {
     String fst = pair.getFirst() != null ? pair.getFirst().toString() : " ";
     String snd = pair.getSecond() != null ? pair.getSecond().toString() : " ";
     if (fst.compareTo(snd) < 0) {
@@ -159,14 +173,14 @@ public class RaceDetector {
   }
 
   /**
-   * Computes which of the message race candidates are actually message races.
-   * Must run genMsgRaceCandidates() before.
+   * Computes which of the message race candidates are actually message races. Must run
+   * genMsgRaceCandidates() before.
    */
   public void computeActualMsgRaces() {
     if (msgRaceCandidates.isEmpty()) {
       System.out.println(
           "[MinhaChecker] No message races to check ("
-              + Stats.totalDataRaceCandidates
+              + Stats.totalMsgRaceCandidates
               + " candidates)");
       return;
     }
@@ -179,10 +193,11 @@ public class RaceDetector {
             + " candidates)");
 
     long checkingStart = System.currentTimeMillis();
-    msgRaceCandidates = ((Z3SolverParallel) solver).checkRacesParallel(msgRaceCandidates);
+    msgRaceCandidates = solver.checkRacesParallel(msgRaceCandidates);
     Stats.checkingTimeMsgRace = System.currentTimeMillis() - checkingStart;
     Stats.totalMsgRacePairs = msgRaceCandidates.size();
 
+    // TODO: use the number of locations instead of number of causalPairs
     System.out.println(
         "\n#Message Race Candidates: "
             + Stats.totalMsgRaceCandidates
@@ -191,21 +206,26 @@ public class RaceDetector {
     prettyPrintMessageRaces();
   }
 
-  public void prettyPrintDataRaces() {
-    for (CausalPair<? extends Event, ? extends Event> race : dataRaceCandidates) {
-      System.out.println("-- " + orderedToString(race));
+  private void prettyPrintDataRaces() {
+    long i = 0;
+    Set<String> pairsOfLocations = getRacesAsLocationPairs(dataRaceCandidates);
+    System.out.println("Data Races:");
+
+    for (String pair : pairsOfLocations) {
+      i++;
+      System.out.println(" > Data Race #" + i + " : " + pair);
     }
   }
 
-  public void prettyPrintMessageRaces() {
+  private void prettyPrintMessageRaces() {
     for (CausalPair<? extends Event, ? extends Event> conf : msgRaceCandidates) {
       // translate SND events to their respective RCV events
       SocketEvent snd1 = (SocketEvent) conf.getFirst();
       SocketEvent snd2 = (SocketEvent) conf.getSecond();
-      SocketEvent rcv1 = traceProcessor.msgEvents.get(snd1.getMessageId()).getRcv();
-      SocketEvent rcv2 = traceProcessor.msgEvents.get(snd2.getMessageId()).getRcv();
+      SocketEvent rcv1 = traceProcessor.sndRcvPairs.get(snd1.getMessageId()).getRcv(0);
+      SocketEvent rcv2 = traceProcessor.sndRcvPairs.get(snd2.getMessageId()).getRcv(0);
       CausalPair<SocketEvent, SocketEvent> rcv_conf = new CausalPair<>(rcv1, rcv2);
-      System.out.println("~~ " + orderedToString(rcv_conf));
+      System.out.println("~~ " + causalPairToOrderedString(rcv_conf));
 
       // compute read-write sets for each message handler
       if (!traceProcessor.handlerEvents.containsKey(rcv1)
@@ -216,13 +236,15 @@ public class RaceDetector {
         HashSet<RWEvent> readWriteSet2 = new HashSet<>();
 
         for (Event e : traceProcessor.handlerEvents.get(rcv1)) {
-          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE)
+          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE) {
             readWriteSet1.add((RWEvent) e);
+          }
         }
 
         for (Event e : traceProcessor.handlerEvents.get(rcv2)) {
-          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE)
+          if (e.getType() == EventType.READ || e.getType() == EventType.WRITE) {
             readWriteSet2.add((RWEvent) e);
+          }
         }
 
         // check for conflicts
@@ -230,7 +252,7 @@ public class RaceDetector {
           for (RWEvent e2 : readWriteSet2) {
             if (e1.conflictsWith(e2)) {
               CausalPair<RWEvent, RWEvent> race = new CausalPair<>(e1, e2);
-              System.out.println("\t-- conflict " + orderedToString(race));
+              System.out.println("\t-- conflict " + causalPairToOrderedString(race));
             }
           }
         }
@@ -250,9 +272,7 @@ public class RaceDetector {
         for (RWEvent w2 : traceProcessor.writeEvents.get(var)) {
           if (w1.conflictsWith(w2)) {
             CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<>(w1, w2);
-            if (!dataRaceCandidates.contains(tmpPair)) {
-              dataRaceCandidates.add(tmpPair);
-            }
+            dataRaceCandidates.add(tmpPair);
           }
         }
 
@@ -260,22 +280,16 @@ public class RaceDetector {
         if (traceProcessor.readEvents.containsKey(var)) {
           for (RWEvent r2 : traceProcessor.readEvents.get(var)) {
             CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<>(w1, r2);
-            if (w1.conflictsWith(r2) && !dataRaceCandidates.contains(tmpPair)) {
+            if (w1.conflictsWith(r2)) {
               dataRaceCandidates.add(tmpPair);
             }
           }
         }
       }
     }
-
-    // DEBUG: print candidate pairs
-    System.out.println("Data Race candidates: ");
-    for (CausalPair<? extends Event, ? extends Event> pair : dataRaceCandidates) {
-      System.out.println("\t" + orderedToString(pair));
-    } // */
   }
 
-  public void genIntraNodeConstraints() throws IOException {
+  private void genIntraNodeConstraints() throws IOException {
     genProgramOrderConstraints();
     genForkStartConstraints();
     genJoinExitConstraints();
@@ -283,7 +297,7 @@ public class RaceDetector {
     genLockingConstraints();
   }
 
-  public void genInterNodeConstraints() throws IOException {
+  private void genInterNodeConstraints() throws IOException {
     genSendReceiveConstraints();
     genMessageHandlingConstraints();
   }
@@ -294,7 +308,7 @@ public class RaceDetector {
    *
    * @return
    */
-  public int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException {
+  private int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException {
 
     // constraint representing the HB relation for the thread's segment
     StringBuilder orderConstraint = new StringBuilder();
@@ -317,9 +331,12 @@ public class RaceDetector {
         segmentIt = genSegmentOrderConstraints(events, segmentIt + 1);
 
         // store event next to RCV to later encode the message arrival order
-        if (segmentIt < events.size() - 1)
+        if (segmentIt < events.size() - 1) {
           rcvNextEvent.put((SocketEvent) e, events.get(segmentIt + 1));
-      } else if (e.getType() == EventType.HNDLEND) break;
+        }
+      } else if (e.getType() == EventType.HNDLEND) {
+        break;
+      }
     }
 
     // write segment's order constraint
@@ -335,7 +352,7 @@ public class RaceDetector {
    *
    * @throws IOException
    */
-  public void genProgramOrderConstraints() throws IOException {
+  private void genProgramOrderConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate program order constraints");
     solver.writeComment("PROGRAM ORDER CONSTRAINTS");
     int max = 0;
@@ -349,15 +366,17 @@ public class RaceDetector {
     for (SortedSet<Event> eventsSortedSet : traceProcessor.eventsPerThread.values()) {
       // TODO: be sure that the order of the list is the same as the SortedSet
       List<Event> events = new ArrayList<>(eventsSortedSet);
-      if (events.isEmpty()) continue;
-      // if there's only one event, we just need to declare it as there are no program order
-      // constraints
-      else if (events.size() == 1) {
+      if (events.isEmpty()) {
+        continue;
+      } else if (events.size() == 1) {
+        // if there's only one event, we just need to declare it as there are no program order
+        // constraints
         String var = solver.declareIntVar(events.get(0).toString(), "0", "MAX");
         solver.writeConst(var);
+      } else {
+        // generate program constraints for the thread segment
+        genSegmentOrderConstraints(events, 0);
       }
-      // generate program constraints for the thread segment
-      else genSegmentOrderConstraints(events, 0);
 
       // build program order constraints for the whole thread trace
       /*StringBuilder orderConstraint = new StringBuilder();
@@ -373,22 +392,24 @@ public class RaceDetector {
     }
   }
 
-  public void genSendReceiveConstraints() throws IOException {
+  private void genSendReceiveConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate communication constraints");
     solver.writeComment("SEND-RECEIVE CONSTRAINTS");
-    for (MessageCausalPair pair : traceProcessor.msgEvents.values()) {
+    for (MessageCausalPair pair : traceProcessor.sndRcvPairs.values()) {
 
-      if (pair.getSnd() == null && pair.getRcv() == null) continue;
+      if (pair.getSnd(0) == null || pair.getRcv(0) == null) {
+        continue;
+      }
 
-      SocketEvent rcv = pair.getRcv();
+      SocketEvent rcv = pair.getRcv(0);
       String cnst = "";
 
       // if there is a message handler, order SND with HANDLERBEGIN instead of RCV
-      if (!traceProcessor.handlerEvents.containsKey(rcv))
-        cnst = solver.cLt(pair.getSnd().toString(), pair.getRcv().toString());
-      else {
+      if (!traceProcessor.handlerEvents.containsKey(rcv)) {
+        cnst = solver.cLt(pair.getSnd(0).toString(), pair.getRcv(0).toString());
+      } else {
         Event handlerbegin = traceProcessor.handlerEvents.get(rcv).get(0);
-        cnst = solver.cLt(pair.getSnd().toString(), handlerbegin.toString());
+        cnst = solver.cLt(pair.getSnd(0).toString(), handlerbegin.toString());
       }
 
       solver.writeConst(solver.postNamedAssert(cnst, "COM"));
@@ -400,7 +421,7 @@ public class RaceDetector {
    *
    * @throws IOException
    */
-  public void genMessageHandlingConstraints() throws IOException {
+  private void genMessageHandlingConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate message handling constraints");
     solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
     String TAG = "HND";
@@ -457,7 +478,9 @@ public class RaceDetector {
         Event nextEvent = rcvNextEvent.get(rcv_i);
 
         // if the RCV is the last event, then nextEvent == null
-        if (nextEvent == null) continue;
+        if (nextEvent == null) {
+          continue;
+        }
 
         StringBuilder outerOr = new StringBuilder();
         for (SocketEvent rcv_j : rcvSet) {
@@ -484,7 +507,7 @@ public class RaceDetector {
     }
   }
 
-  public void genForkStartConstraints() throws IOException {
+  private void genForkStartConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate fork-start constraints");
     solver.writeComment("FORK-START CONSTRAINTS");
     for (List<ThreadCreationEvent> l : traceProcessor.forkEvents.values()) {
@@ -499,7 +522,7 @@ public class RaceDetector {
     }
   }
 
-  public void genJoinExitConstraints() throws IOException {
+  private void genJoinExitConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate join-end constraints");
     solver.writeComment("JOIN-END CONSTRAINTS");
     for (List<ThreadCreationEvent> l : traceProcessor.joinEvents.values()) {
@@ -510,7 +533,7 @@ public class RaceDetector {
     }
   }
 
-  public void genLockingConstraints() throws IOException {
+  private void genLockingConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate locking constraints");
     solver.writeComment("LOCKING CONSTRAINTS");
     for (String var : traceProcessor.lockEvents.keySet()) {
@@ -531,7 +554,9 @@ public class RaceDetector {
 
           // there is no need to add constraints for locking pairs of the same thread
           // as they are already encoded in the program order constraints
-          if (pair_i.getFirst().getThread().equals(pair_j.getFirst().getThread())) continue;
+          if (pair_i.getFirst().getThread().equals(pair_j.getFirst().getThread())) {
+            continue;
+          }
 
           // Ui < Lj || Uj < Li
           String cnstUi_Lj =
@@ -545,13 +570,12 @@ public class RaceDetector {
     }
   }
 
-  public void genWaitNotifyConstraints() throws IOException {
+  private void genWaitNotifyConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate wait-notify constraints");
     solver.writeComment("WAIT-NOTIFY CONSTRAINTS");
-    HashMap<SyncEvent, List<String>> binaryVars =
-        // map: notify event -> list of all binary vars corresponding to that
-        new HashMap<>();
+    // map: notify event -> list of all binary vars corresponding to that
     // notify
+    HashMap<SyncEvent, List<String>> binaryVars = new HashMap<>();
 
     // for a given condition, each notify can be mapped to any wait
     // but a wait can only have a single notify
@@ -575,7 +599,7 @@ public class RaceDetector {
                   + notify.getEventId();
 
           if (!binaryVars.containsKey(notify)) {
-            binaryVars.put(notify, new ArrayList<String>());
+            binaryVars.put(notify, new ArrayList<>());
           }
           binaryVars.get(notify).add(binVar);
 
@@ -603,5 +627,29 @@ public class RaceDetector {
                 solver.cLeq(solver.cSummation(binaryVars.get(notify)), "1"), "WN"));
       }
     }
+  }
+
+  /**
+   * Computes the set of pairs of locations that correspond to races from the set of `CausalPair`s
+   *
+   * @param causalPairs
+   * @return
+   */
+  private Set<String> getRacesAsLocationPairs(
+      Set<CausalPair<? extends Event, ? extends Event>> causalPairs) {
+    return causalPairs.stream()
+        .map(
+            causalPair -> {
+              String[] locations = {
+                causalPair.getFirst().getLineOfCode(), causalPair.getSecond().getLineOfCode()
+              };
+              Arrays.sort(locations);
+              return "(" + locations[0] + ", " + locations[1] + ")";
+            })
+        .collect(Collectors.toSet());
+  }
+
+  private long countDataRaces() {
+    return getRacesAsLocationPairs(dataRaceCandidates).size();
   }
 }

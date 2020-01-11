@@ -42,24 +42,6 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.jetbrains</groupId>
-      <artifactId>annotations-java5</artifactId>
-      <version>RELEASE</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.jetbrains</groupId>
-      <artifactId>annotations-java5</artifactId>
-      <version>RELEASE</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.jetbrains</groupId>
-      <artifactId>annotations-java5</artifactId>
-      <version>RELEASE</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-engine</artifactId>
       <version>5.2.0</version>
@@ -92,7 +74,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>pt.minha.checker.MinhaCheckerParallel</mainClass>
+              <mainClass>pt.minha.checker.CheckerParallel</mainClass>
             </manifest>
           </archive>
         </configuration>
@@ -104,7 +86,6 @@
         <configuration>
           <source>1.8</source>
           <target>1.8</target>
-          <encoding>${project.build.sourceEncoding}</encoding>
         </configuration>
       </plugin>
       <!-- any other plugins -->
@@ -122,7 +103,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>pt.minha.checker.MinhaCheckerParallel</mainClass>
+              <mainClass>pt.minha.checker.CheckerParallel</mainClass>
             </manifest>
           </archive>
           <descriptorRefs>
