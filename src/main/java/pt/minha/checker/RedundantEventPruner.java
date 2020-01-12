@@ -109,7 +109,7 @@ public class RedundantEventPruner {
           break;
       }
     }
-    Stats.percentRedundantRW = 100d * ((double)count) / rwEvents;
+    Stats.percentRedundantRW = 100d * ((double) count) / rwEvents;
     return count;
   }
 
@@ -235,7 +235,7 @@ public class RedundantEventPruner {
 
             if (unlockEvent != null) {
               List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-              if (canRemoveBlock(subTrace)) {
+              if (canRemoveLockedBlock(subTrace)) {
                 redundantInterThreadEvents.add(e);
                 redundantInterThreadEvents.add(unlockEvent);
               }
@@ -376,7 +376,7 @@ public class RedundantEventPruner {
   }
 
   private boolean canRemoveHandler(List<Event> handler) {
-    Set<SyncEvent> openLocks = new HashSet<>();
+    Set<String> openLocks = new HashSet<>();
     if (handler == null) {
       return false;
     }
@@ -398,10 +398,10 @@ public class RedundantEventPruner {
         case CREATE:
           return false;
         case LOCK:
-          openLocks.add((SyncEvent) e);
+          openLocks.add(((SyncEvent) e).getVariable());
           break;
         case UNLOCK:
-          if (!openLocks.remove(e)) {
+          if (!openLocks.remove(((SyncEvent) e).getVariable())) {
             // tried to unlock a thread open outside the handler
             return false;
           }
@@ -434,6 +434,35 @@ public class RedundantEventPruner {
         if (!canRemoveBlock(traceProcessor.eventsPerThread.get(tce.getChildThread()))) {
           return false;
         }
+      }
+    }
+    return true;
+  }
+
+  private boolean canRemoveLockedBlock(Iterable<Event> events) {
+    Set<String> openLocks = new HashSet<>();
+    for (Event e : events) {
+      EventType type = e.getType();
+      // If a block has any instruction capable of inducing a specific ordering of events,
+      // or capable of creating races, it cannot be removed
+      if (type == SND
+          || type == RCV
+          || type == WRITE
+          || type == READ
+          || type == NOTIFY
+          || type == NOTIFYALL
+          || type == WAIT) {
+        return false;
+      } else if (type == CREATE) {
+        // Possible improvement: do the same thing for the SND events
+        ThreadCreationEvent tce = (ThreadCreationEvent) e;
+        if (!canRemoveBlock(traceProcessor.eventsPerThread.get(tce.getChildThread()))) {
+          return false;
+        }
+      } else if (type == LOCK) {
+          openLocks.add(((SyncEvent) e).getVariable());
+      } else if (type == UNLOCK) {
+        openLocks.remove(((SyncEvent) e).getVariable());
       }
     }
     return true;
