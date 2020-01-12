@@ -1,0 +1,8 @@
+{"thread":"main@10.0.0.1","type":"START", "timestamp":1525270020050}
+{"thread":"main@10.0.0.1","type":"CREATE","child":"Thread-1@10.0.0.1", "timestamp":1525270020069}
+{"thread":"Thread-1@10.0.0.1","type":"START","timestamp":1525270021812}
+{"thread":"main@10.0.0.1","loc":"demos.Example1.main.7","variable":"demos.Example1.counter","type":"W", "timestamp":1525270021837}
+{"thread":"main@10.0.0.1","loc":"demos.Example1.main.8","variable":"demos.Example1.counter","type":"W", "timestamp":1525270021852}
+{"thread":"Thread-1@10.0.0.1","loc":"demos.Example1.run.12","variable":"demos.Example1.counter","type":"W", "timestamp":1525270021875}
+{"thread":"Thread-1@10.0.0.1","type":"END","timestamp":1525270022188}
+{"thread":"main@10.0.0.1","type":"END","timestamp":1525270022200}
