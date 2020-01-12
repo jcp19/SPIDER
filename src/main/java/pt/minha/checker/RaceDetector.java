@@ -164,8 +164,14 @@ class RaceDetector {
   // TODO: use the same way to order a string as used in `getRacesAsLocationPairs`
   private static String causalPairToOrderedString(
       CausalPair<? extends Event, ? extends Event> pair) {
-    String fst = pair.getFirst() != null ? pair.getFirst().toString() : " ";
-    String snd = pair.getSecond() != null ? pair.getSecond().toString() : " ";
+    String fst =
+        pair.getFirst() != null
+            ? pair.getFirst().toString() + ":" + pair.getFirst().getLineOfCode()
+            : " ";
+    String snd =
+        pair.getSecond() != null
+            ? pair.getSecond().toString() + ":" + pair.getSecond().getLineOfCode()
+            : " ";
     if (fst.compareTo(snd) < 0) {
       return "(" + snd + ", " + fst + ")";
     }
@@ -209,7 +215,6 @@ class RaceDetector {
   private void prettyPrintDataRaces() {
     long i = 0;
     Set<String> pairsOfLocations = getRacesAsLocationPairs(dataRaceCandidates);
-    System.out.println("Data Races:");
 
     for (String pair : pairsOfLocations) {
       i++;
@@ -218,6 +223,7 @@ class RaceDetector {
   }
 
   private void prettyPrintMessageRaces() {
+    int i = 1;
     for (CausalPair<? extends Event, ? extends Event> conf : msgRaceCandidates) {
       // translate SND events to their respective RCV events
       SocketEvent snd1 = (SocketEvent) conf.getFirst();
@@ -225,12 +231,13 @@ class RaceDetector {
       SocketEvent rcv1 = traceProcessor.sndRcvPairs.get(snd1.getMessageId()).getRcv(0);
       SocketEvent rcv2 = traceProcessor.sndRcvPairs.get(snd2.getMessageId()).getRcv(0);
       CausalPair<SocketEvent, SocketEvent> rcv_conf = new CausalPair<>(rcv1, rcv2);
-      System.out.println("~~ " + causalPairToOrderedString(rcv_conf));
+      System.out.println(
+          " > Message-Message Race #" + i++ + " : " + causalPairToOrderedString(rcv_conf));
 
       // compute read-write sets for each message handler
       if (!traceProcessor.handlerEvents.containsKey(rcv1)
           || !traceProcessor.handlerEvents.containsKey(rcv2)) {
-        System.out.println("\t-- No conflicts");
+        // System.out.println("\t-- No conflicts");
       } else {
         HashSet<RWEvent> readWriteSet1 = new HashSet<>();
         HashSet<RWEvent> readWriteSet2 = new HashSet<>();
