@@ -1,0 +1,12 @@
+{"loc":"microbenchmarks.m4157.NodeAAM.initNode.32","variable":"NodeAAM.isCleaning","thread":"main@10.0.0.2","type":"W", "timestamp":0}
+{"src_port":"2183","dst":"10.0.0.1","size":10,"src":"10.0.0.2","dst_port":"2182","socket_type":"UDP","thread":"main@10.0.0.2","socket":"10.0.0.2:2183-10.0.0.1:2182","type":"SND","message":2137513832,"timestamp":1519835423991}
+{"src_port":"2183","dst":"10.0.0.1","size":10,"src":"10.0.0.2","dst_port":"2182","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.2:2183-10.0.0.1:2182","type":"RCV","message":2137513832,"timestamp":1519835424030}
+{"src_port":"2182","dst":"10.0.0.2","size":4,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.1:2182-10.0.0.2:2183","type":"SND","message":1027598105,"timestamp":1519835424118}
+{"src_port":"2182","dst":"10.0.0.2","size":4,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.2","socket":"10.0.0.1:2182-10.0.0.2:2183","type":"RCV","message":1027598105,"timestamp":1519835424118}
+{"thread":"main@10.0.0.2","type":"CREATE","child":"A-cleaner@10.0.0.2","timestamp":0}
+{"thread":"A-cleaner@10.0.0.2","type":"START","timestamp":0}
+{"loc":"microbenchmarks.m4157.NodeAAM.runM4157.61","variable":"NodeAAM.isCleaning","thread":"main@10.0.0.2","type":"R","timestamp":0}
+{"loc":"microbenchmarks.m4157.NodeAAM$CleanerM4157.run.86","variable":"NodeAAM.isCleaning","thread":"A-cleaner@10.0.0.2","type":"W","timestamp":0}
+{"loc":"microbenchmarks.m4157.NodeAAM$CleanerM4157.run.92","variable":"NodeAAM.isCleaning","thread":"A-cleaner@10.0.0.2","type":"W","timestamp":0}
+{"thread":"main@10.0.0.1","type":"END","timestamp":0}
+{"thread":"main@10.0.0.2","type":"END","timestamp":0}

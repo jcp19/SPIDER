@@ -1,0 +1,15 @@
+{"loc":"microbenchmarks.h5780.NodeBRS.initNode.34","variable":"NodeBRS.securityCode","thread":"main@10.0.0.3","type":"W", "timestamp":0}
+{"thread":"main@10.0.0.3","type":"CREATE","child":"B-zkconnector@10.0.0.3", "timestamp":0}
+{"thread":"B-zkconnector@10.0.0.3","type":"START", "timestamp":0}
+{"loc":"microbenchmarks.h5780.NodeBRS.runH5780.57","variable":"NodeBRS.securityCode","thread":"main@10.0.0.3","type":"R", "timestamp":0}
+{"src_port":"2182","dst":"10.0.0.2","size":7,"src":"10.0.0.3","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.3","socket":"10.0.0.3:2182-10.0.0.2:2181","type":"SND","message":971495808,"timestamp":1519835202748}
+{"src_port":"2182","dst":"10.0.0.1","size":3,"src":"10.0.0.3","dst_port":"2183","socket_type":"UDP","thread":"B-zkconnector@10.0.0.3","socket":"10.0.0.3:2182-10.0.0.1:2183","type":"SND","message":920482940,"timestamp":1519835202780}
+{"src_port":"2182","dst":"10.0.0.1","size":3,"src":"10.0.0.3","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.3:2182-10.0.0.1:2183","type":"RCV","message":920482940,"timestamp":1519835202782}
+{"src_port":"2183","dst":"10.0.0.3","size":5,"src":"10.0.0.1","dst_port":"2182","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.1:2183-10.0.0.3:2182","type":"SND","message":769949980,"timestamp":1519835202817}
+{"src_port":"2183","dst":"10.0.0.3","size":5,"src":"10.0.0.1","dst_port":"2182","socket_type":"UDP","thread":"B-zkconnector@10.0.0.3","socket":"10.0.0.1:2183-10.0.0.3:2182","type":"RCV","message":769949980,"timestamp":1519835202817}
+{"loc":"microbenchmarks.h5780.NodeBRS$ZKConnector.run.84","variable":"NodeBRS.securityCode","thread":"B-zkconnector@10.0.0.3","type":"W", "timestamp":0}
+{"loc":"microbenchmarks.h5780.NodeBRS$ZKConnector.run.85","variable":"NodeBRS.securityCode","thread":"B-zkconnector@10.0.0.3","type":"R", "timestamp":0}
+{"src_port":"2182","dst":"10.0.0.2","size":7,"src":"10.0.0.3","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.2","socket":"10.0.0.3:2182-10.0.0.2:2181","type":"RCV","message":971495808,"timestamp":1519835202820}
+{"thread":"main@10.0.0.1","type":"END", "timestamp": 0}
+{"thread":"main@10.0.0.2","type":"END", "timestamp": 0}
+{"thread":"main@10.0.0.3","type":"END", "timestamp": 0}

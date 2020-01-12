@@ -1,0 +1,15 @@
+{"loc":"microbenchmarks.m3274.NodeCNM.initNode.32","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","type":"W", "timestamp":0}
+{"src_port":"2182","dst":"10.0.0.1","size":9,"src":"10.0.0.2","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.2","socket":"10.0.0.2:2182-10.0.0.1:2181","type":"SND","message":1547747222,"timestamp":1519819609381}
+{"src_port":"2183","dst":"10.0.0.1","size":4,"src":"10.0.0.3","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.3","socket":"10.0.0.3:2183-10.0.0.1:2181","type":"SND","message":316133553,"timestamp":1519819609384}
+{"src_port":"2182","dst":"10.0.0.1","size":9,"src":"10.0.0.2","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.2:2182-10.0.0.1:2181","type":"RCV","message":1547747222,"timestamp":1519819609451}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.59","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","type":"W", "timestamp":0}
+{"thread":"main@10.0.0.1","type":"CREATE","child":"C-worker@10.0.0.1", "timestamp":0}
+{"thread":"C-worker@10.0.0.1","type":"START", "timestamp":0}
+{"src_port":"2183","dst":"10.0.0.1","size":4,"src":"10.0.0.3","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.3:2183-10.0.0.1:2181","type":"RCV","message":316133553,"timestamp":1519819609759}
+{"src_port":"2181","dst":"10.0.0.3","size":26,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"C-worker@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"SND","message":921313447,"timestamp":1519819609759}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.64","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","type":"R", "timestamp":0}
+{"src_port":"2181","dst":"10.0.0.3","size":26,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.3","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"RCV","message":921313447,"timestamp":1519819609775}
+{"src_port":"2181","dst":"10.0.0.3","size":8,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"SND","message":924761484,"timestamp":1519819609812}
+{"thread":"main@10.0.0.1","type":"END", "timestamp":0}
+{"thread":"main@10.0.0.2","type":"END", "timestamp":0}
+{"thread":"main@10.0.0.3","type":"END", "timestamp":0}
