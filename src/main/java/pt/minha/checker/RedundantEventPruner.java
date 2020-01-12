@@ -58,6 +58,7 @@ public class RedundantEventPruner {
   public long removeRedundantRW() {
     EventIterator events = new EventIterator(traceProcessor.eventsPerThread.values());
     long count = 0;
+    long rwEvents = 0;
 
     for (String t : traceProcessor.eventsPerThread.keySet()) {
       concurrencyContexts.put(t, new HashSet<>());
@@ -91,6 +92,7 @@ public class RedundantEventPruner {
             removeEventMetadata(rwe);
             count++;
           }
+          rwEvents++;
           break;
         case SND:
           SocketEvent se = (SocketEvent) e;
@@ -107,6 +109,7 @@ public class RedundantEventPruner {
           break;
       }
     }
+    Stats.percentRedundantRW = 100d * ((double)count) / rwEvents;
     return count;
   }
 
@@ -450,7 +453,7 @@ public class RedundantEventPruner {
    * @param lockEvent an object representing a particular LOCK event.
    * @return the UNLOCK event that is causally-related to the LOCK event passed as input.
    */
-  public SyncEvent getCorrespondingUnlock(SyncEvent lockEvent) {
+  private SyncEvent getCorrespondingUnlock(SyncEvent lockEvent) {
     String thread = lockEvent.getThread();
     List<CausalPair<SyncEvent, SyncEvent>> pairs =
         traceProcessor.lockEvents.get(lockEvent.getVariable());
@@ -468,7 +471,7 @@ public class RedundantEventPruner {
    * @param endEvent an object representing a particular END event.
    * @return the JOIN event that is causally-related to the END event passed as input.
    */
-  public ThreadCreationEvent getCorrespondingJoin(ThreadCreationEvent endEvent) {
+  private ThreadCreationEvent getCorrespondingJoin(ThreadCreationEvent endEvent) {
     List<ThreadCreationEvent> joins = traceProcessor.joinEvents.get(endEvent.getThread());
     String childThread = endEvent.getChildThread();
     if (joins == null) return null;

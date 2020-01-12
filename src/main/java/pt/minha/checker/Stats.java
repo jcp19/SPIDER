@@ -1,10 +1,12 @@
 package pt.minha.checker;
 
+import java.text.DecimalFormat;
+
 /** Created by nunomachado on 11/05/17. */
 @Deprecated
 public class Stats {
 
-  // TODO: change static fields to instance variables
+  // TODO: change this class to a singleton
   // TODO: change printStats to generate a String with the stats THAT WERE UPDATED instead of all
   //       stats and instead of printing directly to the screen
 
@@ -13,6 +15,7 @@ public class Stats {
   public static long numConstraints = 0;
   public static long redundantEvents = 0;
   public static long redundantMsgEvents = 0;
+  public static double percentRedundantRW = 0;
   // public static double buildingModelTime = 0;
 
   // data race variables
@@ -28,11 +31,14 @@ public class Stats {
   public static long totalDataRacePairLocations;
 
   public static void printStats() {
+    DecimalFormat df = new DecimalFormat("#.00");
     System.out.println("\n=======================");
     System.out.println("        RESULTS        ");
     System.out.println("=======================");
     System.out.println("> Number of events in trace:\t\t\t" + numEventsTrace);
     System.out.println("> Number of redundant events in trace:\t\t" + redundantEvents);
+    System.out.println(
+        "> Percentage of redundant RW events in trace:\t\t" + df.format(percentRedundantRW) + "%");
     System.out.println(
         "> Number of redundant inter-thread events in trace:\t" + redundantMsgEvents);
     System.out.println("> Number of constraints in model:\t\t" + numConstraints);
