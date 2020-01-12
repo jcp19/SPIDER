@@ -31,7 +31,7 @@ public class Stats {
   public static long totalDataRacePairLocations;
 
   public static void printStats() {
-    DecimalFormat df = new DecimalFormat("#.00");
+    DecimalFormat df = new DecimalFormat("00.00");
     System.out.println("\n=======================");
     System.out.println("        RESULTS        ");
     System.out.println("=======================");

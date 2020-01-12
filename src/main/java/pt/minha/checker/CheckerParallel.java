@@ -47,7 +47,6 @@ public class CheckerParallel {
     trace.aggregateAllPartitionedMessages();
 
     if (cmd.hasOption("r")) {
-      // only removes redundant events if we are looking for data races
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
       Stats.redundantEvents = eventPruner.removeRedundantRW();
       Stats.redundantMsgEvents = eventPruner.removeRedundantInterThreadEvents();
