@@ -5,7 +5,7 @@
 #   - corre jar data races sem redundancia | usa o resultado no gawk para imprimir meia linha do csv (sem newline no final)
 #   - corre jar data races com redundancia | usa o resultado no gawk para imprimir meia linha do csv (com newline no final)
 CSV_OUTPUT_FILE='data_race_results.csv'
-CSV_HEADER='Test Case, #events in the trace, #contraints, #data race candidates, #data race candidate locations, #actual data races, #actual data race locations, time to check candidates, #contraints(R), #data race candidate locations(R), #actual data races(R), #actual data race locations(R), time to check candidates(R)'
+CSV_HEADER='Test Case, #events in the trace, #contraints, #data race candidates, #data race candidate locations, #actual data races, #actual data race locations, time to check candidates, #removed events (RW + IT) (Redundant RW %), #contraints(R), #data race candidates (R), #data race candidate locations(R), #actual data races(R), #actual data race locations(R), time to check candidates(R)'
 #FOLDERS_WITH_TRACES=('../traces/micro-benchmarks' '../traces/cyclon-spider')
 FOLDERS_WITH_TRACES=('../traces/micro-benchmarks')
 TIMEOUT='120s'
@@ -25,7 +25,7 @@ for folder in ${FOLDERS_WITH_TRACES[@]}; do
       | gawk -f no_rex_data_races.awk >> $CSV_OUTPUT_FILE
     timeout $TIMEOUT java -jar ../target/minha-checker-1.0-SNAPSHOT-jar-with-dependencies.jar -d -f $filename -r \
       | gawk -f rex_data_races.awk >> $CSV_OUTPUT_FILE
-    echo "\n" >> $CSV_OUTPUT_FILE
+    echo "" >> $CSV_OUTPUT_FILE
     echo "> Test $filename done"
   done
 done
