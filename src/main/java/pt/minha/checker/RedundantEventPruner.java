@@ -96,7 +96,7 @@ public class RedundantEventPruner {
           break;
         case SND:
           SocketEvent se = (SocketEvent) e;
-          Utils.insertInMapToSets(concurrencyContexts, thread, se.getMessageId());
+          Utils.insertInMapToSets(concurrencyContexts, thread, se.getSocket() + se.getLineOfCode());
           break;
         case CREATE:
           // handles CREATE events the same way it handles SND because it also introduces
@@ -460,9 +460,12 @@ public class RedundantEventPruner {
           return false;
         }
       } else if (type == LOCK) {
-          openLocks.add(((SyncEvent) e).getVariable());
+        openLocks.add(((SyncEvent) e).getVariable());
       } else if (type == UNLOCK) {
-        openLocks.remove(((SyncEvent) e).getVariable());
+        if (!openLocks.remove(((SyncEvent) e).getVariable())) {
+          // tried to unlock a thread open outside the handler
+          return false;
+        }
       }
     }
     return true;
