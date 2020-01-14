@@ -42,5 +42,5 @@ BEGIN {}
   # removed events (RW + IT) (Redundant RW %), #contraints(R), # data race candidates (R), #data race candidate locations(R), #actual data races(R), #actual data race locations(R), time to check candidates(R)
 
 END {
-  printf("(%s + %s) (%s),%s,%s,%s,%s,%s,%s", results["redundant_events_rw"], results["redundant_events_it"], results["percentage_redundant_rw_events"], results["num_constraints"], results["number_candidates"], results["number_candidate_locations"], results["number_actual"], results["number_actual_locations"], results["time"]);
+  printf("\"(%s + %s) (%s)\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"", results["redundant_events_rw"], results["redundant_events_it"], results["percentage_redundant_rw_events"], results["num_constraints"], results["number_candidates"], results["number_candidate_locations"], results["number_actual"], results["number_actual_locations"], results["time"]);
 }

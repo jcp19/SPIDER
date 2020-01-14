@@ -32,5 +32,5 @@ BEGIN {}
 }
 
 END {
-  printf("%s,%s,%s,%s,%s,%s,%s,", results["num_revents"], results["num_constraints"], results["number_candidates"], results["number_candidate_locations"], results["number_actual"], results["number_actual_locations"], results["time"]);
+  printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",", results["num_revents"], results["num_constraints"], results["number_candidates"], results["number_candidate_locations"], results["number_actual"], results["number_actual_locations"], results["time"]);
 }
