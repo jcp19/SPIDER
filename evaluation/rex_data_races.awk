@@ -34,7 +34,7 @@ BEGIN {}
     results["number_actual_locations"]=res[1]
   }
 
-  if (match($0, "Time to check all candidates:[[:blank:]]*([[:digit:]]*.[[:digit:]][[:blank:]]*seconds)", res)) {
+  if (match($0, "Time to check all candidates:[[:blank:]]*([[:digit:]]+.[[:digit:]]+[[:blank:]]*seconds)", res)) {
     results["time"]=res[1]
   }
 }
