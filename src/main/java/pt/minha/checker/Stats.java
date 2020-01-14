@@ -3,7 +3,6 @@ package pt.minha.checker;
 import java.text.DecimalFormat;
 
 /** Created by nunomachado on 11/05/17. */
-@Deprecated
 public class Stats {
 
   // TODO: change this class to a singleton
