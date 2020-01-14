@@ -22,8 +22,9 @@ Automated distributed data race detection from distributed logs via SMT constrai
 TODO: por tutorial da tese e por trace na pasta logs
 TODO: por o mesmo tutorial que vou por na tese
 TODO: por link para o modelo do alloy4fun http://alloy4fun.inesctec.pt com o modelo
+TODO: por link para o paper
 
-Minha checker provides automated distributed data race detection for Minha via SMT constraint solving. More concretely, Minha checker receives as input an event trace captured at runtime, and generates a happens-before model that encodes the causal relationships between the events. After building the constraint system, Minha checker resorts to an SMT solver, namely Z3, to check for data races. A data race occurs when any two events over the same variable (where at least one of them is a write) are not ordered by a happens-before relationship. 
+Minha checker provides automated distributed data race detection for Minha via SMT constraint solving. More concretely, Minha checker receives as input an event trace captured at runtime, and generates a happens-before model that encodes the causal relationships between the events. After building the constraint system, Minha checker resorts to an SMT solver, namely Z3, to check for data races. It is capable of detecting race conditions **even if no bug caused by races conditions is noticeable in the traced execution**. A data race occurs when any two events over the same variable (where at least one of them is a write) are not ordered by a happens-before relationship. They are known to be a usual cause of severe bugs in concurrent and distributed systems.
 
 ## Configuration 
 
@@ -33,6 +34,9 @@ Edit configuration file `/src/main/resources/checker.racedetection.properties` a
 
 
 ## Building the project
+### Dependencies
+- Falcon (https://github.com/fntneves/falcon/tree/master/falcon-taz)
+- [z3](https://github.com/Z3Prover/z3) in PATH
 
 ## Usage
 POR FLAGS!!!
@@ -53,6 +57,10 @@ $ java -jar ./target/minha-checker-1.0-SNAPSHOT-jar-with-dependencies.jar
 ## Trce format
 mandar para site do falcon
 
-## Dependencies
-- Falcon (https://github.com/fntneves/falcon/tree/master/falcon-taz)
-- [z3](https://github.com/Z3Prover/z3) in PATH
+## Running Example
+por link para o ficheiro no repo do Exemplo1 da tese
+por código aqui tb incluindo input e output e comandos invocados e trace e imagem do alloy
+
+## How it works
+Falar brevemente das race conditions, Smts e modelo HB
+por link para a minha tese e paper para quem quiser saber mais
