@@ -22,7 +22,7 @@ BEGIN {}
     results["number_actual"]=res[1]
   }
 
-  if (match($0, "Time to check all candidates:[[:blank:]]*([[:digit:]]*.[[:digit:]][[:blank:]]*seconds)", res)) {
+  if (match($0, "Time to check all message race candidates:[[:blank:]]*([[:digit:]]*.[[:digit:]]*[[:blank:]]*seconds)", res)) {
     results["time"]=res[1]
   }
 }
@@ -33,5 +33,5 @@ BEGIN {}
   # - #actual msg-msg race candidates, 
   # - time to check candidates,
 END {
-  printf("%s,%s,%s,%s,%s,", results["num_revents"], results["num_constraints"], results["number_candidates"], results["number_actual"], results["time"]);
+  printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",", results["num_revents"], results["num_constraints"], results["number_candidates"], results["number_actual"], results["time"]);
 }

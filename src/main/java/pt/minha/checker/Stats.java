@@ -60,7 +60,7 @@ public class Stats {
     System.out.println("  > Number of message race candidates:\t\t" + totalMsgRaceCandidates);
     System.out.println("  > Number of actual message races:\t\t" + totalMsgRacePairs);
     System.out.println(
-        "  > Time to check all candidates:\t\t"
+        "  > Time to check all message race candidates:\t\t"
             + (checkingTimeMsgRace / (double) 1000)
             + " seconds");
   }
