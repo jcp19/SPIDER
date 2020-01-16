@@ -1,15 +1,18 @@
-{"loc":"microbenchmarks.m3274.NodeCNM.initNode.32","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","type":"W", "timestamp":0}
-{"src_port":"2182","dst":"10.0.0.1","size":9,"src":"10.0.0.2","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.2","socket":"10.0.0.2:2182-10.0.0.1:2181","type":"SND","message":1547747222,"timestamp":1519819609381}
-{"src_port":"2183","dst":"10.0.0.1","size":4,"src":"10.0.0.3","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.3","socket":"10.0.0.3:2183-10.0.0.1:2181","type":"SND","message":316133553,"timestamp":1519819609384}
-{"src_port":"2182","dst":"10.0.0.1","size":9,"src":"10.0.0.2","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.2:2182-10.0.0.1:2181","type":"RCV","message":1547747222,"timestamp":1519819609451}
-{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.59","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","type":"W", "timestamp":0}
-{"thread":"main@10.0.0.1","type":"CREATE","child":"C-worker@10.0.0.1", "timestamp":0}
-{"thread":"C-worker@10.0.0.1","type":"START", "timestamp":0}
-{"src_port":"2183","dst":"10.0.0.1","size":4,"src":"10.0.0.3","dst_port":"2181","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.3:2183-10.0.0.1:2181","type":"RCV","message":316133553,"timestamp":1519819609759}
-{"src_port":"2181","dst":"10.0.0.3","size":26,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"C-worker@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"SND","message":921313447,"timestamp":1519819609759}
-{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.64","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","type":"R", "timestamp":0}
-{"src_port":"2181","dst":"10.0.0.3","size":26,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.3","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"RCV","message":921313447,"timestamp":1519819609775}
-{"src_port":"2181","dst":"10.0.0.3","size":8,"src":"10.0.0.1","dst_port":"2183","socket_type":"UDP","thread":"main@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"SND","message":924761484,"timestamp":1519819609812}
-{"thread":"main@10.0.0.1","type":"END", "timestamp":0}
-{"thread":"main@10.0.0.2","type":"END", "timestamp":0}
-{"thread":"main@10.0.0.3","type":"END", "timestamp":0}
+{"loc":"microbenchmarks.m3274.NodeCNM.initNode.32","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","counter":0,"type":"W","timestamp":1579180239981}
+{"src_port":2183,"loc":"microbenchmarks.m3274.NodeAAM.runM3274.48","dst":"10.0.0.1","size":4,"src":"10.0.0.3","socket_type":"UDP","dst_port":2181,"thread":"main@10.0.0.3","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"SND","message":"1266509350","timestamp":1579180240811}
+{"src_port":2182,"loc":"microbenchmarks.m3274.NodeBRM.runM3274.48","dst":"10.0.0.1","size":9,"src":"10.0.0.2","socket_type":"UDP","dst_port":2181,"thread":"main@10.0.0.2","socket":"10.0.0.1:2181-10.0.0.2:2182","type":"SND","message":"992543612","timestamp":1579180240849}
+{"src_port":2183,"loc":"microbenchmarks.m3274.NodeCNM.runM3274.55","dst":"10.0.0.1","size":4,"src":"10.0.0.3","socket_type":"UDP","dst_port":2181,"thread":"main@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"RCV","message":"1266509350","timestamp":1579180240870}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.56","thread":"main@10.0.0.1","counter":1,"type":"HANDLERBEGIN","timestamp":1579180240870}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.65","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","counter":0,"type":"R","timestamp":1579180240875}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.77","thread":"main@10.0.0.1","counter":1,"type":"HANDLEREND","timestamp":1579180240882}
+{"src_port":2182,"loc":"microbenchmarks.m3274.NodeCNM.runM3274.55","dst":"10.0.0.1","size":9,"src":"10.0.0.2","socket_type":"UDP","dst_port":2181,"thread":"main@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.2:2182","type":"RCV","message":"992543612","timestamp":1579180240882}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.56","thread":"main@10.0.0.1","counter":2,"type":"HANDLERBEGIN","timestamp":1579180240883}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.60","variable":"NodeCNM.hasContainer","thread":"main@10.0.0.1","counter":1,"type":"W","timestamp":1579180240898}
+{"thread":"main@10.0.0.1","type":"CREATE","child":"C-worker@10.0.0.1","timestamp":1579180240898}
+{"thread":"C-worker@10.0.0.1","type":"START","timestamp":1579180240898}
+{"loc":"microbenchmarks.m3274.NodeCNM.runM3274.77","thread":"main@10.0.0.1","counter":2,"type":"HANDLEREND","timestamp":1579180240901}
+{"src_port":2181,"loc":"microbenchmarks.m3274.NodeCNM$WorkerM3274.run.105","dst":"10.0.0.3","size":26,"src":"10.0.0.1","socket_type":"UDP","dst_port":2183,"thread":"C-worker@10.0.0.1","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"SND","message":"1584212759","timestamp":1579180241390}
+{"src_port":2181,"loc":"microbenchmarks.m3274.NodeAAM.runM3274.51","dst":"10.0.0.3","size":26,"src":"10.0.0.1","socket_type":"UDP","dst_port":2183,"thread":"main@10.0.0.3","socket":"10.0.0.1:2181-10.0.0.3:2183","type":"RCV","message":"1584212759","timestamp":1579180241404}
+{"thread":"main@10.0.0.1","type":"END","timestamp":1579180241418}
+{"thread":"main@10.0.0.2","type":"END","timestamp":1579180241419}
+{"thread":"main@10.0.0.3","type":"END","timestamp":1579180241419}
