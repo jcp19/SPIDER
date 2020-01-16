@@ -625,8 +625,15 @@ class RaceDetector {
   }
 
   private void genMsgLinkageConstraints() throws IOException {
+    System.out.println("[MinhaChecker] Generate Message Linkage constraints");
+    solver.writeComment("MESSAGE-LINKAGE CONSTRAINTS");
 
-    
+    /*
+    Plan:
+    - substitute and store for each thread the RCV_x variables associated with them
+    - store for each thread the actual RCV_message_id variables received
+    - for each thread, encode the linkage constraints
+     */
   }
 
   /**
