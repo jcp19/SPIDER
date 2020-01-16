@@ -384,18 +384,6 @@ class RaceDetector {
         // generate program constraints for the thread segment
         genSegmentOrderConstraints(events, 0);
       }
-
-      // build program order constraints for the whole thread trace
-      /*StringBuilder orderConstraint = new StringBuilder();
-      for(Event e : events){
-          //declare variable
-          String var = solver.declareIntVar(e.toString(), "0", "MAX");
-          solver.writeConst(var);
-
-          //append to order constraint
-          orderConstraint.append(" "+e.toString());
-      }
-      solver.writeConst(solver.postNamedAssert(solver.cLt(orderConstraint.toString()), "PC")); */
     }
   }
 
@@ -634,6 +622,11 @@ class RaceDetector {
                 solver.cLeq(solver.cSummation(binaryVars.get(notify)), "1"), "WN"));
       }
     }
+  }
+
+  private void genMsgLinkageConstraints() throws IOException {
+
+    
   }
 
   /**
