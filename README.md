@@ -6,7 +6,7 @@
 
 <br/>
 <p align="center"><h1 align="center">SPIDER</h1><p align="center">
-<h3>Automated distributed data race detection from distributed logs via SMT constraint solving.</h3>
+Automated distributed data race detection from distributed logs via SMT constraint solving.
 <br/>
 <!--<a href=""><strong>Explore the docs &#xBB;</strong></a>
 <br/>
