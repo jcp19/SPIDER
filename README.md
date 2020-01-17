@@ -5,8 +5,8 @@
 [![MIT License][license-shield]][license-url]
 
 <br/>
-<p align="center"><h1 align="center">minha-checker</h1><p align="center">
-Automated distributed data race detection from distributed logs via SMT constraint solving.
+<p align="center"><h1 align="center">SPIDER</h1><p align="center">
+<h3>Automated distributed data race detection from distributed logs via SMT constraint solving.</h3>
 <br/>
 <!--<a href=""><strong>Explore the docs &#xBB;</strong></a>
 <br/>
