@@ -25,7 +25,7 @@ public enum Stats {
   public long totalDataRaceCandidateLocations;
   public long totalDataRacePairLocations;
 
-  private Stats() {}
+  Stats() {}
 
   public static Stats getInstance() {
     return INSTANCE;

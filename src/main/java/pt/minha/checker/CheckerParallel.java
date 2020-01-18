@@ -76,7 +76,6 @@ public class CheckerParallel {
 
     solver.close();
     System.out.println(Stats.getInstance().getSummary());
-    ;
   }
 
   public static Z3SolverParallel initSolver(String solverPath) throws IOException {

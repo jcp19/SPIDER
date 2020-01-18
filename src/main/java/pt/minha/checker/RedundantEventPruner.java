@@ -1,7 +1,6 @@
 package pt.minha.checker;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -133,22 +132,13 @@ public class RedundantEventPruner {
   }
 
   private Stack<String> getStack(String loc, Set<String> concurrencyContext) {
-    Set<String> concurrencyHistory = concurrencyHistories.get(loc);
-    if (concurrencyHistory == null) {
-      concurrencyHistory = new HashSet<>();
-      concurrencyHistories.put(loc, concurrencyHistory);
-    }
+    Set<String> concurrencyHistory = concurrencyHistories.computeIfAbsent(loc, k -> new HashSet<>());
 
     // If a statement can produce more than one event, than this line shoudld change.
     // The key should be extended with some string which can differentiate between events
     // produced on the same statement.
     String key = "loc:" + loc + ":" + concurrencyContext.hashCode();
-    Stack<String> stack = stacks.get(key);
-
-    if (stack == null) {
-      stack = new Stack<>();
-      stacks.put(key, stack);
-    }
+    Stack<String> stack = stacks.computeIfAbsent(key, k -> new Stack<>());
 
     return stack;
   }

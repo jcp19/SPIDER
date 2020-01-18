@@ -319,7 +319,7 @@ class RaceDetector {
 
     // constraint representing the HB relation for the thread's segment
     StringBuilder orderConstraint = new StringBuilder();
-    int segmentIt = 0;
+    int segmentIt;
 
     for (segmentIt = segmentStart; segmentIt < events.size(); segmentIt++) {
       Event e = events.get(segmentIt);
@@ -409,7 +409,7 @@ class RaceDetector {
       }
 
       SocketEvent rcv = pair.getRcv(0);
-      String cnst = "";
+      String cnst;
 
       // if there is a message handler, order SND with HANDLERBEGIN instead of RCV
       if (!traceProcessor.handlerEvents.containsKey(rcv)) {
