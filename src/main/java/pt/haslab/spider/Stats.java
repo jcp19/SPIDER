@@ -1,4 +1,4 @@
-package pt.minha.checker;
+package pt.haslab.spider;
 
 import java.text.DecimalFormat;
 

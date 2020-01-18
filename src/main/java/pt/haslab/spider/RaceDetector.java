@@ -1,4 +1,4 @@
-package pt.minha.checker;
+package pt.haslab.spider;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,6 +12,7 @@ import java.util.SortedSet;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pt.haslab.spider.solver.Z3SolverParallel;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.causality.MessageCausalPair;
@@ -21,7 +22,6 @@ import pt.haslab.taz.events.RWEvent;
 import pt.haslab.taz.events.SocketEvent;
 import pt.haslab.taz.events.SyncEvent;
 import pt.haslab.taz.events.ThreadCreationEvent;
-import pt.minha.checker.solver.Z3SolverParallel;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
 

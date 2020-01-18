@@ -1,4 +1,4 @@
-package pt.minha.checker.solver;
+package pt.haslab.spider.solver;
 
 import java.io.IOException;
 import java.util.List;
