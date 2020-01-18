@@ -1,4 +1,4 @@
-package pt.minha.checker;
+package pt.haslab.spider;
 
 import java.io.IOException;
 import org.apache.commons.cli.CommandLine;
@@ -8,8 +8,8 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.json.JSONException;
+import pt.haslab.spider.solver.Z3SolverParallel;
 import pt.haslab.taz.TraceProcessor;
-import pt.minha.checker.solver.Z3SolverParallel;
 
 public class CheckerParallel {
   public static void main(String[] args) throws IOException, JSONException {

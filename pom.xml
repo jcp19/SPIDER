@@ -74,7 +74,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>pt.minha.checker.CheckerParallel</mainClass>
+              <mainClass>pt.haslab.spider.CheckerParallel</mainClass>
             </manifest>
           </archive>
         </configuration>
@@ -103,7 +103,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>pt.minha.checker.CheckerParallel</mainClass>
+              <mainClass>pt.haslab.spider.CheckerParallel</mainClass>
             </manifest>
           </archive>
           <descriptorRefs>

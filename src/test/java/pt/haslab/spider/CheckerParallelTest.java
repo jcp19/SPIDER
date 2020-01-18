@@ -1,4 +1,4 @@
-package pt.minha.checker;
+package pt.haslab.spider;
 
 import org.junit.jupiter.api.Test;
 import pt.haslab.taz.events.CatIterator;

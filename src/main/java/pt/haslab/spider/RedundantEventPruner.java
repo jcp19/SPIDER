@@ -1,4 +1,4 @@
-package pt.minha.checker;
+package pt.haslab.spider;
 
 import java.util.ArrayList;
 import java.util.HashMap;

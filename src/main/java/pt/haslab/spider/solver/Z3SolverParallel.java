@@ -1,8 +1,8 @@
-package pt.minha.checker.solver;
+package pt.haslab.spider.solver;
 
 import pt.haslab.taz.causality.CausalPair;
 import pt.haslab.taz.events.*;
-import pt.minha.checker.Stats;
+import pt.haslab.spider.Stats;
 
 import java.io.*;
 import java.util.ArrayList;
