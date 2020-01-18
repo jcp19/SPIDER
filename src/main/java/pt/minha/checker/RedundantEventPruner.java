@@ -352,7 +352,7 @@ public class RedundantEventPruner {
   private void removeEventMetadataAux(SyncEvent e) {
     EventType type = e.getType();
 
-    if (e.equals(LOCK) && e.equals(UNLOCK)) {
+    if (type != LOCK && type != UNLOCK) {
       throw new RuntimeException("Removing event metadata with the wrong method");
     }
 
@@ -486,7 +486,6 @@ public class RedundantEventPruner {
    * @return the UNLOCK event that is causally-related to the LOCK event passed as input.
    */
   private SyncEvent getCorrespondingUnlock(SyncEvent lockEvent) {
-    String thread = lockEvent.getThread();
     List<CausalPair<SyncEvent, SyncEvent>> pairs =
         traceProcessor.lockEvents.get(lockEvent.getVariable());
     for (CausalPair<SyncEvent, SyncEvent> se : pairs) {
