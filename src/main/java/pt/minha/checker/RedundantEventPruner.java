@@ -109,7 +109,7 @@ public class RedundantEventPruner {
           break;
       }
     }
-    Stats.percentRedundantRW = 100d * ((double) count) / rwEvents;
+    Stats.INSTANCE.percentRedundantRW = 100d * ((double) count) / rwEvents;
     return count;
   }
 

@@ -42,14 +42,14 @@ public class CheckerParallel {
 
     TraceProcessor trace = TraceProcessor.INSTANCE;
     trace.loadEventTrace(traceFilePath);
-    Stats.numEventsTrace = trace.getNumberOfEvents();
+    Stats.INSTANCE.numEventsTrace = trace.getNumberOfEvents();
     // aggregate partitioned messages to facilitate message race detection
     trace.aggregateAllPartitionedMessages();
 
     if (cmd.hasOption("r")) {
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
-      Stats.redundantEvents = eventPruner.removeRedundantRW();
-      Stats.redundantMsgEvents = eventPruner.removeRedundantInterThreadEvents();
+      Stats.INSTANCE.redundantEvents = eventPruner.removeRedundantRW();
+      Stats.INSTANCE.redundantMsgEvents = eventPruner.removeRedundantInterThreadEvents();
     }
 
     Z3SolverParallel solver;
@@ -75,7 +75,8 @@ public class CheckerParallel {
     }
 
     solver.close();
-    Stats.printStats();
+    System.out.println(Stats.getInstance().getSummary());
+    ;
   }
 
   public static Z3SolverParallel initSolver(String solverPath) throws IOException {

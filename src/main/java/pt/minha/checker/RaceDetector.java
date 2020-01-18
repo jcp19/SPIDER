@@ -66,29 +66,29 @@ class RaceDetector {
     if (dataRaceCandidates.isEmpty()) {
       System.out.println(
           "[MinhaChecker] No data races to check ("
-              + Stats.totalDataRaceCandidates
+              + Stats.INSTANCE.totalDataRaceCandidates
               + " candidates)");
       return;
     }
 
-    Stats.totalDataRaceCandidates = dataRaceCandidates.size();
-    Stats.totalDataRaceCandidateLocations = countDataRaces();
+    Stats.INSTANCE.totalDataRaceCandidates = dataRaceCandidates.size();
+    Stats.INSTANCE.totalDataRaceCandidateLocations = countDataRaces();
     System.out.println(
         "\n[MinhaChecker] Start data race checking ("
-            + Stats.totalDataRaceCandidates
+            + Stats.INSTANCE.totalDataRaceCandidates
             + " candidates)");
 
     long checkingStart = System.currentTimeMillis();
     dataRaceCandidates = solver.checkRacesParallel(dataRaceCandidates);
-    Stats.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
-    Stats.totalDataRacePairs = dataRaceCandidates.size();
-    Stats.totalDataRacePairLocations = countDataRaces();
+    Stats.INSTANCE.checkingTimeDataRace = System.currentTimeMillis() - checkingStart;
+    Stats.INSTANCE.totalDataRacePairs = dataRaceCandidates.size();
+    Stats.INSTANCE.totalDataRacePairLocations = countDataRaces();
 
     System.out.println(
         "\n#Data Race Candidates: "
-            + Stats.totalDataRaceCandidates
+            + Stats.INSTANCE.totalDataRaceCandidates
             + " | #Actual Data Races: "
-            + Stats.totalDataRacePairs);
+            + Stats.INSTANCE.totalDataRacePairs);
     prettyPrintDataRaces();
   }
 
@@ -186,29 +186,29 @@ class RaceDetector {
     if (msgRaceCandidates.isEmpty()) {
       System.out.println(
           "[MinhaChecker] No message races to check ("
-              + Stats.totalMsgRaceCandidates
+              + Stats.INSTANCE.totalMsgRaceCandidates
               + " candidates)");
       return;
     }
 
-    Stats.totalMsgRaceCandidates = msgRaceCandidates.size();
+    Stats.INSTANCE.totalMsgRaceCandidates = msgRaceCandidates.size();
 
     System.out.println(
         "\n[MinhaChecker] Start message race checking ("
-            + Stats.totalMsgRaceCandidates
+            + Stats.INSTANCE.totalMsgRaceCandidates
             + " candidates)");
 
     long checkingStart = System.currentTimeMillis();
     msgRaceCandidates = solver.checkRacesParallel(msgRaceCandidates);
-    Stats.checkingTimeMsgRace = System.currentTimeMillis() - checkingStart;
-    Stats.totalMsgRacePairs = msgRaceCandidates.size();
+    Stats.INSTANCE.checkingTimeMsgRace = System.currentTimeMillis() - checkingStart;
+    Stats.INSTANCE.totalMsgRacePairs = msgRaceCandidates.size();
 
     // TODO: use the number of locations instead of number of causalPairs
     System.out.println(
         "\n#Message Race Candidates: "
-            + Stats.totalMsgRaceCandidates
+            + Stats.INSTANCE.totalMsgRaceCandidates
             + " | #Actual Message Races: "
-            + Stats.totalMsgRacePairs);
+            + Stats.INSTANCE.totalMsgRacePairs);
     prettyPrintMessageRaces();
   }
 
