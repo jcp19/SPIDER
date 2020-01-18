@@ -3,64 +3,75 @@ package pt.minha.checker;
 import java.text.DecimalFormat;
 
 /** Created by nunomachado on 11/05/17. */
-public class Stats {
-
-  // TODO: change this class to a singleton
-  // TODO: change printStats to generate a String with the stats THAT WERE UPDATED instead of all
-  //       stats and instead of printing directly to the screen
-
+public enum Stats {
+  INSTANCE;
   // general variables
-  public static long numEventsTrace = 0;
-  public static long numConstraints = 0;
-  public static long redundantEvents = 0;
-  public static long redundantMsgEvents = 0;
-  public static double percentRedundantRW = 0;
+  public long numEventsTrace;
+  public long numConstraints;
+  public long redundantEvents;
+  public long redundantMsgEvents;
+  public double percentRedundantRW;
   // public static double buildingModelTime = 0;
 
   // data race variables
-  public static long totalDataRaceCandidates = 0;
-  public static long totalDataRacePairs = 0;
-  public static double checkingTimeDataRace = 0;
+  public long totalDataRaceCandidates;
+  public long totalDataRacePairs;
+  public double checkingTimeDataRace;
 
   // message race variables
-  public static long totalMsgRaceCandidates = 0;
-  public static long totalMsgRacePairs = 0;
-  public static double checkingTimeMsgRace = 0;
-  public static long totalDataRaceCandidateLocations;
-  public static long totalDataRacePairLocations;
+  public long totalMsgRaceCandidates;
+  public long totalMsgRacePairs;
+  public double checkingTimeMsgRace;
+  public long totalDataRaceCandidateLocations;
+  public long totalDataRacePairLocations;
 
-  public static void printStats() {
+  private Stats() {}
+
+  public static Stats getInstance() {
+    return INSTANCE;
+  }
+
+  public String getSummary() {
     DecimalFormat df = new DecimalFormat("00.00");
-    System.out.println("\n=======================");
-    System.out.println("        RESULTS        ");
-    System.out.println("=======================");
-    System.out.println("> Number of events in trace:\t\t\t" + numEventsTrace);
-    System.out.println("> Number of redundant events in trace:\t\t" + redundantEvents);
-    System.out.println(
+    StringBuilder sb = new StringBuilder();
+    appendLn(sb, "\n=======================");
+    appendLn(sb, "        RESULTS        ");
+    appendLn(sb, "=======================");
+    appendLn(sb, "> Number of events in trace:\t\t" + numEventsTrace);
+    appendLn(sb, "> Number of redundant events in trace:\t\t" + redundantEvents);
+    appendLn(
+        sb,
         "> Percentage of redundant RW events in trace:\t\t" + df.format(percentRedundantRW) + "%");
-    System.out.println(
-        "> Number of redundant inter-thread events in trace:\t" + redundantMsgEvents);
-    System.out.println("> Number of constraints in model:\t\t" + numConstraints);
+    appendLn(sb, "> Number of redundant inter-thread events in trace:\t\t" + redundantMsgEvents);
+    appendLn(sb, "> Number of constraints in model:\t\t" + numConstraints);
     /*System.out.println(
     "> Time to generate constraint model:\t\t"
         + (buildingModelTime / (double) 1000)
         + " seconds");*/
-    System.out.println("\n## DATA RACES:");
-    System.out.println("  > Number of data race candidates:\t\t" + totalDataRaceCandidates);
-    System.out.println(
-        "  > Number of data race candidate locations:\t" + totalDataRaceCandidateLocations);
-    System.out.println("  > Number of actual data races:\t\t" + totalDataRacePairs);
-    System.out.println("  > Number of actual data race locations:\t" + totalDataRacePairLocations);
-    System.out.println(
+    appendLn(sb, "\n## DATA RACES:");
+    appendLn(sb, "  > Number of data race candidates:\t\t" + totalDataRaceCandidates);
+    appendLn(
+        sb, "  > Number of data race candidate locations:\t\t" + totalDataRaceCandidateLocations);
+    appendLn(sb, "  > Number of actual data races:\t\t" + totalDataRacePairs);
+    appendLn(sb, "  > Number of actual data race locations:\t\t" + totalDataRacePairLocations);
+    appendLn(
+        sb,
         "  > Time to check all candidates:\t\t"
             + (checkingTimeDataRace / (double) 1000)
             + " seconds");
-    System.out.println("\n## MESSAGE RACES:");
-    System.out.println("  > Number of message race candidates:\t\t" + totalMsgRaceCandidates);
-    System.out.println("  > Number of actual message races:\t\t" + totalMsgRacePairs);
-    System.out.println(
+    appendLn(sb, "\n## MESSAGE RACES:");
+    appendLn(sb, "  > Number of message race candidates:\t\t" + totalMsgRaceCandidates);
+    appendLn(sb, "  > Number of actual message races:\t\t" + totalMsgRacePairs);
+    appendLn(
+        sb,
         "  > Time to check all message race candidates:\t\t"
             + (checkingTimeMsgRace / (double) 1000)
             + " seconds");
+    return sb.toString();
+  }
+
+  private void appendLn(StringBuilder sb, String s) {
+    sb.append(s);
+    sb.append("\n");
   }
 }

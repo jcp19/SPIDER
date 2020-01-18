@@ -212,16 +212,16 @@ public class Z3SolverParallel implements Solver {
 
   public String postAssert(String constraint) {
     // synchronized (this) {
-    Stats.numConstraints++;
+    Stats.INSTANCE.numConstraints++;
     // }
     return ("(assert " + constraint + ")");
   }
 
   public String postNamedAssert(String constraint, String label) {
     // synchronized (this) {
-    Stats.numConstraints++;
+    Stats.INSTANCE.numConstraints++;
     // }
-    return ("(assert (! " + constraint + ":named " + label + Stats.numConstraints + "))");
+    return ("(assert (! " + constraint + ":named " + label + Stats.INSTANCE.numConstraints + "))");
   }
 
   private String push() {
