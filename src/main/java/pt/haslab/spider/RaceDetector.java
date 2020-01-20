@@ -233,7 +233,7 @@ class RaceDetector {
       SocketEvent rcv2 = traceProcessor.sndRcvPairs.get(msgId2).getRcv(0);
 
       // check if rcv1 and rcv2 occur at the same node and short circuit otherwise
-      if (!getEventNode(rcv1).equals(getEventNode(rcv2))) {
+      if (!rcv1.getNodeId().equals(rcv2.getNodeId())) {
         continue;
       }
 
@@ -339,11 +339,6 @@ class RaceDetector {
 
     // update Stats data structure
     //Stats.INSTANCE.dataRacesFromMsgs = ...
-  }
-
-  private String getEventNode(Event e) {
-    String thread = e.getThread();
-    return thread.split("@", 2)[1];
   }
 
   private void prettyPrintDataRaces() {
