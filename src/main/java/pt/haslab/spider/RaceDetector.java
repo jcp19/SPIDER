@@ -7,9 +7,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pt.haslab.spider.solver.Z3SolverParallel;
@@ -24,8 +26,10 @@ import pt.haslab.taz.events.SyncEvent;
 import pt.haslab.taz.events.ThreadCreationEvent;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
+import static pt.haslab.taz.events.EventType.RCV;
 
 class RaceDetector {
+
   private static final Logger logger = LoggerFactory.getLogger(RaceDetector.class);
   private HashSet<CausalPair<? extends Event, ? extends Event>> dataRaceCandidates;
   private HashSet<CausalPair<? extends Event, ? extends Event>> msgRaceCandidates;
@@ -40,6 +44,23 @@ class RaceDetector {
     rcvNextEvent = new HashMap<>();
     this.solver = solver;
     this.traceProcessor = traceProcessor;
+  }
+
+  // TODO: use the same way to order a string as used in `getRacesAsLocationPairs`
+  private static String causalPairToOrderedString(
+      CausalPair<? extends Event, ? extends Event> pair) {
+    String fst =
+        pair.getFirst() != null
+            ? pair.getFirst().toString() + ":" + pair.getFirst().getLineOfCode()
+            : " ";
+    String snd =
+        pair.getSecond() != null
+            ? pair.getSecond().toString() + ":" + pair.getSecond().getLineOfCode()
+            : " ";
+    if (fst.compareTo(snd) < 0) {
+      return "(" + snd + ", " + fst + ")";
+    }
+    return "(" + fst + ", " + snd + ")";
   }
 
   public void generateConstraintModel() throws IOException {
@@ -161,23 +182,6 @@ class RaceDetector {
     }
   }
 
-  // TODO: use the same way to order a string as used in `getRacesAsLocationPairs`
-  private static String causalPairToOrderedString(
-      CausalPair<? extends Event, ? extends Event> pair) {
-    String fst =
-        pair.getFirst() != null
-            ? pair.getFirst().toString() + ":" + pair.getFirst().getLineOfCode()
-            : " ";
-    String snd =
-        pair.getSecond() != null
-            ? pair.getSecond().toString() + ":" + pair.getSecond().getLineOfCode()
-            : " ";
-    if (fst.compareTo(snd) < 0) {
-      return "(" + snd + ", " + fst + ")";
-    }
-    return "(" + fst + ", " + snd + ")";
-  }
-
   /**
    * Computes which of the message race candidates are actually message races. Must run
    * genMsgRaceCandidates() before.
@@ -210,6 +214,136 @@ class RaceDetector {
             + " | #Actual Message Races: "
             + Stats.INSTANCE.totalMsgRacePairs);
     prettyPrintMessageRaces();
+    computeDataRacesFromMsgRaces();
+  }
+
+  private void computeDataRacesFromMsgRaces() {
+    Set<String> dataRacesFromMsgs = new HashSet<>();
+    for (CausalPair<? extends Event, ? extends Event> causalPair : msgRaceCandidates) {
+
+      SocketEvent e1 = (SocketEvent) causalPair.getFirst();
+      SocketEvent e2 = (SocketEvent) causalPair.getSecond();
+
+      // e1 and e2 may be either SND or RCV
+      // get the corresponding message handler
+      String msgId1 = e1.getMessageId();
+      String msgId2 = e2.getMessageId();
+      // once again, it is assumed that there is no network partition
+      SocketEvent rcv1 = traceProcessor.sndRcvPairs.get(msgId1).getRcv(0);
+      SocketEvent rcv2 = traceProcessor.sndRcvPairs.get(msgId2).getRcv(0);
+
+      // check if rcv1 and rcv2 occur at the same node and short circuit otherwise
+      if (!getEventNode(rcv1).equals(getEventNode(rcv2))) {
+        continue;
+      }
+
+      List<Event> handler1 = traceProcessor.handlerEvents.get(rcv1);
+
+      if (handler1 == null) {
+        continue;
+      }
+
+      // get variables accessed in handler 1
+      // set of read events per variable
+      Map<String, Set<RWEvent>> accessesRead1 = new HashMap<>();
+      // set of write events per variable
+      Map<String, Set<RWEvent>> accessesWrite1 = new HashMap<>();
+
+      for (Event e : handler1) {
+        switch (e.getType()) {
+          case READ:
+            RWEvent readEvent = (RWEvent) e;
+            accessesRead1.computeIfAbsent(readEvent.getVariable(), k -> new HashSet<>())
+                .add(readEvent);
+            break;
+          case WRITE:
+            RWEvent writeEvent = (RWEvent) e;
+            accessesWrite1.computeIfAbsent(writeEvent.getVariable(), k -> new HashSet<>())
+                .add(writeEvent);
+            break;
+          default:
+            break;
+        }
+      }
+
+      // Do the same for message 2
+      List<Event> handler2 = traceProcessor.handlerEvents.get(rcv2);
+
+      if (handler2 == null) {
+        continue;
+      }
+
+      // get variables accessed in handler 2
+      // set of read events per variable
+      Map<String, Set<RWEvent>> accessesRead2 = new HashMap<>();
+      // set of write events per variable
+      Map<String, Set<RWEvent>> accessesWrite2 = new HashMap<>();
+      for (Event e : handler2) {
+        switch (e.getType()) {
+          case READ:
+            RWEvent readEvent = (RWEvent) e;
+            accessesRead2.computeIfAbsent(readEvent.getVariable(), k -> new HashSet<>())
+                .add(readEvent);
+            break;
+          case WRITE:
+            RWEvent writeEvent = (RWEvent) e;
+            accessesWrite2.computeIfAbsent(writeEvent.getVariable(), k -> new HashSet<>())
+                .add(writeEvent);
+            break;
+          default:
+            break;
+        }
+      }
+
+      // obtain sets of all variables accessed
+      Set<String> accessedVars = new HashSet<>();
+      accessedVars.addAll(accessesRead1.keySet());
+      accessedVars.addAll(accessesWrite1.keySet());
+      accessedVars.addAll(accessesRead2.keySet());
+      accessedVars.addAll(accessesWrite2.keySet());
+
+      // for all variables accessed:
+      for (String var : accessedVars) {
+        // 1. for all write accesses to a variable, they collide with every write and read access
+        for (RWEvent event1 : accessesWrite1.computeIfAbsent(var, k -> new HashSet<>())) {
+          for (RWEvent event2 : accessesWrite2.computeIfAbsent(var, k -> new HashSet<>())) {
+            CausalPair<RWEvent, RWEvent> dataRace = new CausalPair<>(event1, event2);
+            dataRacesFromMsgs.add(getRaceAsLocationPair(dataRace));
+          }
+        }
+
+        for (RWEvent event1 : accessesWrite1.computeIfAbsent(var, k -> new HashSet<>())) {
+          for (RWEvent event2 : accessesRead2.computeIfAbsent(var, k -> new HashSet<>())) {
+            CausalPair<RWEvent, RWEvent> dataRace = new CausalPair<>(event1, event2);
+            dataRacesFromMsgs.add(getRaceAsLocationPair(dataRace));
+          }
+        }
+
+        // 2. for all read accesses to a variable, they collide with every write access
+        for (RWEvent event1 : accessesRead1.computeIfAbsent(var, k -> new HashSet<>())) {
+          for (RWEvent event2 : accessesWrite2.computeIfAbsent(var, k -> new HashSet<>())) {
+            CausalPair<RWEvent, RWEvent> dataRace = new CausalPair<>(event1, event2);
+            dataRacesFromMsgs.add(getRaceAsLocationPair(dataRace));
+          }
+        }
+      }
+    }
+
+    // print them
+    int i = 0;
+    System.out.println("\n#Data Races from Message Races: " + dataRacesFromMsgs.size());
+    for (String pair : dataRacesFromMsgs) {
+      i++;
+      System.out.println(" > Data Race #" + i + " : " + pair);
+    }
+
+    // update Stats data structure
+    //Stats.INSTANCE.dataRacesFromMsgs = ...
+  }
+
+  private String getEventNode(Event e) {
+    String thread = e.getThread();
+    return thread.split("@", 2)[1];
   }
 
   private void prettyPrintDataRaces() {
@@ -259,7 +393,7 @@ class RaceDetector {
           for (RWEvent e2 : readWriteSet2) {
             if (e1.conflictsWith(e2)) {
               CausalPair<RWEvent, RWEvent> race = new CausalPair<>(e1, e2);
-              System.out.println("\t-- conflict " + causalPairToOrderedString(race));
+              // System.out.println("\t-- conflict " + causalPairToOrderedString(race));
             }
           }
         }
@@ -424,7 +558,8 @@ class RaceDetector {
   }
 
   /**
-   * Message Handling constraints encode: - message handler mutual exclusion - message arrival order
+   * Message Handling constraints encode: - message handler mutual exclusion - message arrival
+   * order
    *
    * @throws IOException
    */
@@ -645,15 +780,16 @@ class RaceDetector {
   private Set<String> getRacesAsLocationPairs(
       Set<CausalPair<? extends Event, ? extends Event>> causalPairs) {
     return causalPairs.stream()
-        .map(
-            causalPair -> {
-              String[] locations = {
-                causalPair.getFirst().getLineOfCode(), causalPair.getSecond().getLineOfCode()
-              };
-              Arrays.sort(locations);
-              return "(" + locations[0] + ", " + locations[1] + ")";
-            })
+        .map(this::getRaceAsLocationPair)
         .collect(Collectors.toSet());
+  }
+
+  private String getRaceAsLocationPair(CausalPair<? extends Event, ? extends Event> causalPair) {
+    String[] locations = {
+        causalPair.getFirst().getLineOfCode(), causalPair.getSecond().getLineOfCode()
+    };
+    Arrays.sort(locations);
+    return "(" + locations[0] + ", " + locations[1] + ")";
   }
 
   private long countDataRaces() {
