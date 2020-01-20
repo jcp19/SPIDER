@@ -36,7 +36,7 @@ public class CheckerParallel {
     } catch (ParseException e) {
       System.err.println("Error: " + e);
       HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp("java -jar minha-checker", options);
+      formatter.printHelp("java -jar spider", options);
       System.exit(1);
     }
 
@@ -74,6 +74,7 @@ public class CheckerParallel {
       raceDetector.computeActualMsgRaces();
     }
 
+    solver.flush();
     solver.close();
     System.out.println(Stats.getInstance().getSummary());
   }
