@@ -386,7 +386,7 @@ class RaceDetector {
         // check for conflicts
         for (RWEvent e1 : readWriteSet1) {
           for (RWEvent e2 : readWriteSet2) {
-            if (e1.conflictsWith(e2)) {
+            if (conflictingEvents(e1, e2)) {
               CausalPair<RWEvent, RWEvent> race = new CausalPair<>(e1, e2);
               // System.out.println("\t-- conflict " + causalPairToOrderedString(race));
             }
@@ -394,6 +394,18 @@ class RaceDetector {
         }
       }
     }
+  }
+
+  /**
+   * Determines whether two memory accesses are conflicting.
+   * This functionality used to be provided by method `conflictsWith` of
+   * Falcon's `RWEvent` class but it was producing wrong results due to its
+   * use of the field `eventId` which is of no use in Spider
+   */
+  private boolean conflictingEvents(RWEvent e1, RWEvent e2) {
+    return (e1.getType() == EventType.WRITE || e2.getType() == EventType.WRITE) && e1.getNodeId()
+        .equals(e2.getNodeId()) && e1.getVariable().equals(e2.getVariable()) &&
+        !e1.getThread().equals(e2.getThread());
   }
 
   /**
@@ -406,7 +418,7 @@ class RaceDetector {
       for (RWEvent w1 : traceProcessor.writeEvents.get(var)) {
         // pair with all other writes
         for (RWEvent w2 : traceProcessor.writeEvents.get(var)) {
-          if (w1.conflictsWith(w2)) {
+          if (conflictingEvents(w1, w2)) {
             CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<>(w1, w2);
             dataRaceCandidates.add(tmpPair);
           }
@@ -416,7 +428,7 @@ class RaceDetector {
         if (traceProcessor.readEvents.containsKey(var)) {
           for (RWEvent r2 : traceProcessor.readEvents.get(var)) {
             CausalPair<RWEvent, RWEvent> tmpPair = new CausalPair<>(w1, r2);
-            if (w1.conflictsWith(r2)) {
+            if (conflictingEvents(w1, r2)) {
               dataRaceCandidates.add(tmpPair);
             }
           }
