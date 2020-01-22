@@ -24,6 +24,7 @@ import pt.haslab.taz.utils.Utils;
 import static pt.haslab.taz.events.EventType.*;
 
 public class RedundantEventPruner {
+
   private TraceProcessor traceProcessor;
   private static final Logger logger = LoggerFactory.getLogger(RedundantEventPruner.class);
 
@@ -132,7 +133,8 @@ public class RedundantEventPruner {
   }
 
   private Stack<String> getStack(String loc, Set<String> concurrencyContext) {
-    Set<String> concurrencyHistory = concurrencyHistories.computeIfAbsent(loc, k -> new HashSet<>());
+    Set<String> concurrencyHistory = concurrencyHistories
+        .computeIfAbsent(loc, k -> new HashSet<>());
 
     // If a statement can produce more than one event, than this line shoudld change.
     // The key should be extended with some string which can differentiate between events
@@ -143,17 +145,13 @@ public class RedundantEventPruner {
     return stack;
   }
 
-  public long removeRedundantInterThreadEvents() {
-    return removeRedundantInterThreadEvents(false);
-  }
-
   /**
    * Generalize ReX algorithm to distributed systems, making it capable of pruning SND and RCV
    * events. For maximum effectiveness, this mehtod should be run after `removeRedundantRW`.
    *
    * @return the number of removed events
    */
-  public long removeRedundantInterThreadEvents(boolean removeMsgsWithoutHandler) {
+  public long removeRedundantInterThreadEvents() {
     // can be optimized to check only once every part of the code
     Set<String> checkedThreads = new HashSet<>();
     Set<Event> redundantInterThreadEvents = new HashSet<>();
@@ -191,32 +189,14 @@ public class RedundantEventPruner {
               }
             }
             break;
-
           case RCV:
-            SocketEvent rcve = (SocketEvent) e;
-            List<Event> handler = traceProcessor.handlerEvents.get(rcve);
-            MessageCausalPair pair = traceProcessor.sndRcvPairs.get(rcve.getMessageId());
+            List<Event> handler = traceProcessor.handlerEvents.get(e);
 
-            // if the send/rcv is redundant and there is no message handler
-            if (((handler == null && removeMsgsWithoutHandler) || canRemoveHandler(handler))
-                && pair != null) {
-
-              // I'm assuming that there is no message partition or at least that partitioning
-              // is abstracted from the trace
-              List<SocketEvent> sndList = pair.getSndList();
-              List<SocketEvent> rcvList = pair.getRcvList();
-
-              if (sndList != null) {
-                redundantInterThreadEvents.addAll(sndList);
-              }
-
-              if (rcvList != null) {
-                redundantInterThreadEvents.addAll(rcvList);
-              }
-
-              if (handler != null) {
-                redundantInterThreadEvents.addAll(handler);
-              }
+            if (canRemoveBlock(handler)) {
+              // I'm keeping the SND and RCV events to ensure that the the HB relation
+              // remains unchanged
+              redundantInterThreadEvents.addAll(handler);
+              traceProcessor.handlerEvents.remove(e);
             }
             break;
           case LOCK:
@@ -224,8 +204,9 @@ public class RedundantEventPruner {
             SyncEvent unlockEvent = getCorrespondingUnlock(lockEvent);
 
             if (unlockEvent != null) {
-              List<Event> subTrace = events.subList(i, events.indexOf(unlockEvent) + 1);
-              if (canRemoveLockedBlock(subTrace)) {
+              // this block must not contain the respective Lock and Unlock events
+              List<Event> subTrace = events.subList(i + 1, events.indexOf(unlockEvent));
+              if (canRemoveBlock(subTrace)) {
                 redundantInterThreadEvents.add(e);
                 redundantInterThreadEvents.add(unlockEvent);
               }
@@ -365,80 +346,26 @@ public class RedundantEventPruner {
     }
   }
 
-  private boolean canRemoveHandler(List<Event> handler) {
-    Set<String> openLocks = new HashSet<>();
-    if (handler == null) {
+  private boolean canRemoveBlock(Iterable<Event> events) {
+    if (events == null) {
       return false;
     }
-    for (Event e : handler) {
+
+    Set<String> openLocks = new HashSet<>();
+    for (Event e : events) {
       EventType type = e.getType();
+
       if (redundantEvents.contains(e)) {
         continue;
       }
-      // If a block has any instruction capable of inducing a specific ordering of events,
-      // it cannot be removed
-      switch (type) {
-        case SND:
-        case RCV:
-        case READ:
-        case WRITE:
-        case NOTIFY:
-        case NOTIFYALL:
-        case WAIT:
-        case CREATE:
-          return false;
-        case LOCK:
-          openLocks.add(((SyncEvent) e).getVariable());
-          break;
-        case UNLOCK:
-          if (!openLocks.remove(((SyncEvent) e).getVariable())) {
-            // tried to unlock a thread open outside the handler
-            return false;
-          }
-          break;
-        default:
-          break;
-      }
-    }
-    return openLocks.isEmpty();
-  }
 
-  private boolean canRemoveBlock(Iterable<Event> events) {
-    for (Event e : events) {
-      EventType type = e.getType();
       // If a block has any instruction capable of inducing a specific ordering of events,
       // or capable of creating races, it cannot be removed
       if (type == SND
           || type == RCV
           || type == WRITE
           || type == READ
-          || type == NOTIFY
-          || type == NOTIFYALL
-          || type == LOCK
-          || type == UNLOCK
-          || type == WAIT) {
-        return false;
-      } else if (type == CREATE) {
-        // Possible improvement: do the same thing for the SND events
-        ThreadCreationEvent tce = (ThreadCreationEvent) e;
-        if (!canRemoveBlock(traceProcessor.eventsPerThread.get(tce.getChildThread()))) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  private boolean canRemoveLockedBlock(Iterable<Event> events) {
-    Set<String> openLocks = new HashSet<>();
-    for (Event e : events) {
-      EventType type = e.getType();
-      // If a block has any instruction capable of inducing a specific ordering of events,
-      // or capable of creating races, it cannot be removed
-      if (type == SND
-          || type == RCV
-          || type == WRITE
-          || type == READ
+          || type == JOIN
           || type == NOTIFY
           || type == NOTIFYALL
           || type == WAIT) {
@@ -450,6 +377,8 @@ public class RedundantEventPruner {
           return false;
         }
       } else if (type == LOCK) {
+        // TODO: understand what to do when we enter a block with a reentrant lock already
+        //       acquired and then we acquire and release the lock
         openLocks.add(((SyncEvent) e).getVariable());
       } else if (type == UNLOCK) {
         if (!openLocks.remove(((SyncEvent) e).getVariable())) {
@@ -458,7 +387,8 @@ public class RedundantEventPruner {
         }
       }
     }
-    return true;
+
+    return openLocks.isEmpty();
   }
 
   private static <K, V> boolean removeFromMapToLists(Map<K, List<V>> map, K key, V value) {
@@ -495,7 +425,9 @@ public class RedundantEventPruner {
   private ThreadCreationEvent getCorrespondingJoin(ThreadCreationEvent endEvent) {
     List<ThreadCreationEvent> joins = traceProcessor.joinEvents.get(endEvent.getThread());
     String childThread = endEvent.getChildThread();
-    if (joins == null) return null;
+    if (joins == null) {
+      return null;
+    }
     for (ThreadCreationEvent join : joins) {
       if (join != null && childThread.equals(join.getChildThread())) {
         return join;
