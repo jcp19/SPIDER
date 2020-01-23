@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.stream.Collectors;
 
+import com.sun.tools.javac.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pt.haslab.spider.solver.Z3SolverParallel;
@@ -26,7 +27,6 @@ import pt.haslab.taz.events.SyncEvent;
 import pt.haslab.taz.events.ThreadCreationEvent;
 
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
-import static pt.haslab.taz.events.EventType.RCV;
 
 class RaceDetector {
 
@@ -397,15 +397,15 @@ class RaceDetector {
   }
 
   /**
-   * Determines whether two memory accesses are conflicting.
-   * This functionality used to be provided by method `conflictsWith` of
-   * Falcon's `RWEvent` class but it was producing wrong results due to its
-   * use of the field `eventId` which is of no use in Spider
+   * Determines whether two memory accesses are conflicting. This functionality used to be provided
+   * by method `conflictsWith` of Falcon's `RWEvent` class but it was producing wrong results due to
+   * its use of the field `eventId` which is of no use in Spider
    */
   private boolean conflictingEvents(RWEvent e1, RWEvent e2) {
-    return (e1.getType() == EventType.WRITE || e2.getType() == EventType.WRITE) && e1.getNodeId()
-        .equals(e2.getNodeId()) && e1.getVariable().equals(e2.getVariable()) &&
-        !e1.getThread().equals(e2.getThread());
+    return (e1.getType() == EventType.WRITE || e2.getType() == EventType.WRITE)
+        && e1.getNodeId().equals(e2.getNodeId())
+        && e1.getVariable().equals(e2.getVariable())
+        && !e1.getThread().equals(e2.getThread());
   }
 
   /**
@@ -447,7 +447,8 @@ class RaceDetector {
 
   private void genInterNodeConstraints() throws IOException {
     genSendReceiveConstraints();
-    genMessageHandlingConstraints();
+    //genWeakMessageHandlingConstraints();
+    genStrongMessageHandlingConstraints();
   }
 
   /**
@@ -457,7 +458,6 @@ class RaceDetector {
    * @return
    */
   private int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException {
-
     // constraint representing the HB relation for the thread's segment
     StringBuilder orderConstraint = new StringBuilder();
     int segmentIt;
@@ -570,7 +570,7 @@ class RaceDetector {
    *
    * @throws IOException
    */
-  private void genMessageHandlingConstraints() throws IOException {
+  private void genWeakMessageHandlingConstraints() throws IOException {
     System.out.println("[MinhaChecker] Generate message handling constraints");
     solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
     String TAG = "HND";
@@ -654,6 +654,100 @@ class RaceDetector {
         solver.writeConst(solver.postNamedAssert(solver.cOr(outerOr.toString()), TAG));
       }
     }
+  }
+
+  private void genStrongMessageHandlingConstraints() throws IOException {
+    System.out.println("[MinhaChecker] Generate message handling constraints");
+    solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
+    String TAG = "HND";
+
+    Map<String, Set<SocketEvent>> rcvPerThread =
+        new HashMap<>();                // map: thread-socket -> list of rcv events
+    Map<String, Set<Pair<String, String>>> handlersPerThread =
+        new HashMap<>();  // map: thread-socket -> list of pairs (h_begin, h_end)
+    for (SocketEvent rcv : traceProcessor.handlerEvents.keySet()) {
+      String key = rcv.getThread() + "-" + rcv.getDstPort();
+      rcvPerThread.putIfAbsent(key, new HashSet<>());
+      handlersPerThread.putIfAbsent(key, new HashSet<>());
+
+      // store all rcv events per thread-socket
+      rcvPerThread.get(key).add(rcv);
+
+      // store all handler pairs per thread-socket
+      List<Event> rcvHandler = traceProcessor.handlerEvents.get(rcv);
+      Pair<String, String> handlerDelimiters = new Pair<>(
+          rcvHandler.get(0).toString(),
+          rcvHandler.get(rcvHandler.size() - 1).toString());
+      handlersPerThread.get(key).add(handlerDelimiters);
+    }
+
+    // for each rcv, add assert with disjunction of rcv-handler linkages
+    for (String threadSocket : rcvPerThread.keySet()) {
+
+      Set<SocketEvent> rcvSet = rcvPerThread.get(threadSocket);
+      Set<Pair<String, String>> handlerSet = handlersPerThread.get(threadSocket);
+      for (SocketEvent rcv : rcvSet) {
+        String rcvHandlerConstraints =
+            genRcvHandlerLinkageConstraints(rcv, rcvNextEvent.get(rcv), handlerSet);
+        solver.writeConst(solver.postNamedAssert(rcvHandlerConstraints, TAG));
+      }
+    }
+  }
+
+  /**
+   * Receive Handler linkage constraints encode the mapping between a given Rcv event and all
+   * handlers whose messages arrive at the same thread of R and through the same socket.
+   * <p>
+   * Let R be a Rcv event and H the set of handlers belonging to the same thread of R and the same
+   * socket. The receive-handler linkage constraints state that for all h_i \in H: R = hBegin_i &&
+   * hEnd_i < {event next to R in the thread timeline} && ( for all {h_j \in H, h_j != h_i}: hEnd_i
+   * < hBegin_j || hEnd_j < hBegin_i )
+   * <p>
+   * Briefly speaking, the constraints state that R has to be mapped to one and only one handler. In
+   * particular, if R is mapped to h_i, then all other h_j occur either before or after h_i.
+   *
+   * @throws IOException
+   */
+  private String genRcvHandlerLinkageConstraints(SocketEvent rcv, Event nextEvent,
+      Set<Pair<String, String>> handlers) {
+    StringBuilder outerOr = new StringBuilder();
+
+    // for all h_i \in H, map R with h_i
+    for (Pair<String, String> handler_i : handlers) {
+      String handlerBegin_i = handler_i.fst;
+      String handlerEnd_i = handler_i.snd;
+      StringBuilder innerAnd = new StringBuilder();
+
+      // R = hBegin_i
+      String rcvHndLinkage = solver.cEq(rcv.toString(), handlerBegin_i);
+      if (nextEvent != null) {
+        // when there's an event following R, we augment the constraint as follows:
+        //   R = hBegin_i && hEnd_i < nextEvent
+        rcvHndLinkage = rcvHndLinkage + " " + solver.cLt(handlerEnd_i, nextEvent.toString());
+      }
+
+      innerAnd.append(rcvHndLinkage + " ");
+
+      // for all h_j \in H, h_j != h_i: hEnd_i < hBegin_j || hEnd_j < hBegin_i
+      for (Pair<String, String> handler_j : handlers) {
+        if (handler_i == handler_j) {
+          continue;
+        }
+
+        String handlerBegin_j = handler_j.fst;
+        String handlerEnd_j = handler_j.snd;
+
+        // hEnd_i < hBegin_j || hEnd_j < hBegin_i
+        String mutexConst = solver.cOr(solver.cLt(handlerEnd_i, handlerBegin_j),
+            solver.cLt(handlerEnd_j, handlerBegin_i));
+
+        innerAnd.append(mutexConst + " ");
+      }
+
+      outerOr.append(solver.cAnd(innerAnd.toString()) + " ");
+    }
+
+    return solver.cOr(outerOr.toString());
   }
 
   private void genForkStartConstraints() throws IOException {
