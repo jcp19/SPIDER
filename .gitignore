@@ -105,4 +105,5 @@ fabric.properties
 target/
 model.txt
 modelParallel.txt
+*.smt2
 # End of https://www.gitignore.io/api/intellij

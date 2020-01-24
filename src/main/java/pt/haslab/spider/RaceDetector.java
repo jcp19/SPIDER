@@ -12,6 +12,9 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.stream.Collectors;
 
+import org.paukov.combinatorics.Generator;
+import org.paukov.combinatorics.ICombinatoricsVector;
+import com.sun.tools.javac.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pt.haslab.spider.solver.Z3SolverParallel;
@@ -25,8 +28,9 @@ import pt.haslab.taz.events.SocketEvent;
 import pt.haslab.taz.events.SyncEvent;
 import pt.haslab.taz.events.ThreadCreationEvent;
 
+import static org.paukov.combinatorics.CombinatoricsFactory.createSimpleCombinationGenerator;
+import static org.paukov.combinatorics.CombinatoricsFactory.createVector;
 import static pt.haslab.taz.events.EventType.NOTIFYALL;
-import static pt.haslab.taz.events.EventType.RCV;
 
 class RaceDetector {
 
@@ -397,15 +401,15 @@ class RaceDetector {
   }
 
   /**
-   * Determines whether two memory accesses are conflicting.
-   * This functionality used to be provided by method `conflictsWith` of
-   * Falcon's `RWEvent` class but it was producing wrong results due to its
-   * use of the field `eventId` which is of no use in Spider
+   * Determines whether two memory accesses are conflicting. This functionality used to be provided
+   * by method `conflictsWith` of Falcon's `RWEvent` class but it was producing wrong results due to
+   * its use of the field `eventId` which is of no use in Spider
    */
   private boolean conflictingEvents(RWEvent e1, RWEvent e2) {
-    return (e1.getType() == EventType.WRITE || e2.getType() == EventType.WRITE) && e1.getNodeId()
-        .equals(e2.getNodeId()) && e1.getVariable().equals(e2.getVariable()) &&
-        !e1.getThread().equals(e2.getThread());
+    return (e1.getType() == EventType.WRITE || e2.getType() == EventType.WRITE)
+        && e1.getNodeId().equals(e2.getNodeId())
+        && e1.getVariable().equals(e2.getVariable())
+        && !e1.getThread().equals(e2.getThread());
   }
 
   /**
@@ -447,7 +451,8 @@ class RaceDetector {
 
   private void genInterNodeConstraints() throws IOException {
     genSendReceiveConstraints();
-    genMessageHandlingConstraints();
+    //genStrongMessageHandlingConstraints();
+    genTraceMessageHandlingConstraints();
   }
 
   /**
@@ -457,7 +462,6 @@ class RaceDetector {
    * @return
    */
   private int genSegmentOrderConstraints(List<Event> events, int segmentStart) throws IOException {
-
     // constraint representing the HB relation for the thread's segment
     StringBuilder orderConstraint = new StringBuilder();
     int segmentIt;
@@ -565,95 +569,142 @@ class RaceDetector {
   }
 
   /**
-   * Message Handling constraints encode: - message handler mutual exclusion - message arrival
-   * order
+   * Message Handling constraints encode: - message handler mutual exclusion - message arrival order
+   * according to trace
    *
    * @throws IOException
    */
-  private void genMessageHandlingConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate message handling constraints");
-    solver.writeComment("MESSAGE HANDLING CONSTRAINTS");
+  private void genTraceMessageHandlingConstraints() throws IOException {
+    System.out.println(
+        "[MinhaChecker] Generate receive-handler linkage constraints according to the trace");
+    solver.writeComment("RECEIVE-HANDLER LINKAGE CONSTRAINTS");
+    String TAG = "RCV_HND";
+    for (Map.Entry<SocketEvent, List<Event>> handlerEvents : traceProcessor.handlerEvents
+        .entrySet()) {
+      SocketEvent rcv = handlerEvents.getKey();
+      List<Event> rcvHandler = handlerEvents.getValue();
+      Pair<String, String> handlerDelimiters = new Pair<>(
+          rcvHandler.get(0).toString(),
+          rcvHandler.get(rcvHandler.size() - 1).toString());
+
+      // encode rcv-handler linkage according to the trace:
+      // R = hBegin
+      String rcvHndLinkage = solver.cEq(rcv.toString(), handlerDelimiters.fst);
+      Event nextEvent = rcvNextEvent.get(rcv);
+      if (nextEvent != null) {
+        // when there's an event following R, we augment the constraint as follows:
+        //   R = hBegin_i && hEnd_i < nextEvent
+        rcvHndLinkage =
+            rcvHndLinkage + " " + solver.cLt(handlerDelimiters.fst, nextEvent.toString());
+      }
+      solver.writeConst(solver.postNamedAssert(solver.cAnd(rcvHndLinkage), TAG));
+    }
+  }
+
+  private void genStrongMessageHandlingConstraints() throws IOException {
+    // map: thread-socket -> list of rcv events
+    Map<String, Set<SocketEvent>> rcvPerThread = new HashMap<>();
+    // map: thread-socket -> list of pairs (h_begin, h_end)
+    Map<String, Set<Pair<String, String>>> handlersPerThread = new HashMap<>();
+
+    for (SocketEvent rcv : traceProcessor.handlerEvents.keySet()) {
+      String key = rcv.getThread() + "-" + rcv.getDstPort();
+      rcvPerThread.putIfAbsent(key, new HashSet<>());
+      handlersPerThread.putIfAbsent(key, new HashSet<>());
+
+      // store all rcv events per thread-socket
+      rcvPerThread.get(key).add(rcv);
+
+      // store all handler pairs per thread-socket
+      List<Event> rcvHandler = traceProcessor.handlerEvents.get(rcv);
+      Pair<String, String> handlerDelimiters = new Pair<>(
+          rcvHandler.get(0).toString(),
+          rcvHandler.get(rcvHandler.size() - 1).toString());
+      handlersPerThread.get(key).add(handlerDelimiters);
+    }
+
+        /* encode mutual exclusion constraints, which state that two message handlers in the same thread
+    must occur one before the other in any order */
+    System.out.println("[MinhaChecker] Generate handler mutual exclusion constraints");
+    solver.writeComment("HANDLER MUTEX CONSTRAINTS");
+    for (Set<Pair<String, String>> handlerSet : handlersPerThread.values()) {
+      getHandlerMutexConstraints(handlerSet);
+    }
+
+    System.out.println("[MinhaChecker] Generate receive-handler linkage constraints");
+    solver.writeComment("RECEIVE-HANDLER LINKAGE CONSTRAINTS");
+    // for each rcv, add assert with disjunction of rcv-handler linkages
+    for (String threadSocket : rcvPerThread.keySet()) {
+      Set<SocketEvent> rcvSet = rcvPerThread.get(threadSocket);
+      Set<Pair<String, String>> handlerSet = handlersPerThread.get(threadSocket);
+
+      for (SocketEvent rcv : rcvSet) {
+        genRcvHandlerLinkageConstraints(rcv, rcvNextEvent.get(rcv), handlerSet);
+      }
+    }
+  }
+
+  /**
+   * Handler mutual exclusion constraints state that handlers cannot execute in parallel, thus an
+   * handler must execute either before or after any other handler. Let H be set of all handlers in
+   * the same thread and for the same socket channel, and h_i and h_j be two different handlers \in
+   * H. Then, the mutual exclusion constraints are written as: hEnd_i < hBegin_j || hEnd_j <
+   * hBegin_i
+   *
+   * @throws IOException
+   */
+  private void getHandlerMutexConstraints(Set<Pair<String, String>> handlerSet) throws IOException {
     String TAG = "HND";
 
-    HashMap<String, HashSet<SocketEvent>> rcvPerThread = new HashMap<>();
+    // create combinations of handler pairs to avoid redundant constraints
+    ICombinatoricsVector<Pair<String, String>> handlerVector = createVector(handlerSet);
+    Generator<Pair<String, String>> handlerCombinations = createSimpleCombinationGenerator(
+        handlerVector, 2);
+    for (ICombinatoricsVector<Pair<String, String>> combination : handlerCombinations) {
+      Pair<String, String> handler_i = combination.getValue(0);
+      Pair<String, String> handler_j = combination.getValue(1);
 
-    /* encode mutual exclusion constraints, which state that two message handlers in the same thread
-    must occur one before the other in any order */
-    for (SocketEvent rcv_i : traceProcessor.handlerEvents.keySet()) {
-      // store all rcv events per thread-socket
-      String key = rcv_i.getThread() + "-" + rcv_i.getDstPort();
-      if (!rcvPerThread.containsKey(key)) {
-        rcvPerThread.put(key, new HashSet<>());
+      // hEnd_i < hBegin_j || hEnd_j < hBegin_i
+      String mutexConst = solver.cOr(solver.cLt(handler_i.snd, handler_j.fst),
+          solver.cLt(handler_j.snd, handler_i.fst));
+      solver.writeConst(solver.postNamedAssert(mutexConst, TAG));
+    }
+  }
+
+  /**
+   * Receive-Handler linkage constraints encode the mapping between a given Rcv event and all
+   * handlers whose messages arrive at the same thread of R and through the same socket.
+   * <p>
+   * Let R be a Rcv event and H the set of handlers belonging to the same thread of R and the same
+   * socket. The receive-handler linkage constraints state that for all h_i \in H: R = hBegin_i &&
+   * hEnd_i < {event next to R in the thread timeline}
+   * <p>
+   * Briefly speaking, the constraints state that R has to be mapped to one and only one handler.
+   *
+   * @throws IOException
+   */
+  private void genRcvHandlerLinkageConstraints(SocketEvent rcv,
+      Event nextEvent,
+      Set<Pair<String, String>> handlers) throws IOException {
+    String TAG = "RCV_HND";
+    StringBuilder outerOr = new StringBuilder();
+
+    // for all h_i \in H, map R with h_i
+    for (Pair<String, String> handler_i : handlers) {
+      String handlerBegin_i = handler_i.fst;
+      String handlerEnd_i = handler_i.snd;
+
+      // R = hBegin_i
+      String rcvHndLinkage = solver.cEq(rcv.toString(), handlerBegin_i);
+      if (nextEvent != null) {
+        // when there's an event following R, we augment the constraint as follows:
+        //   R = hBegin_i && hEnd_i < nextEvent
+        rcvHndLinkage = rcvHndLinkage + " " + solver.cLt(handlerEnd_i, nextEvent.toString());
       }
-      rcvPerThread.get(key).add(rcv_i);
-
-      for (SocketEvent rcv_j : traceProcessor.handlerEvents.keySet()) {
-        if (rcv_i != rcv_j
-            && rcv_i.getThread().equals(rcv_j.getThread())
-            && rcv_i.getDstPort() == rcv_j.getDstPort()) {
-
-          // mutual exclusion: HENDi < HBEGj V HENDj < HBEGi
-          String handlerBegin_i = traceProcessor.handlerEvents.get(rcv_i).get(0).toString();
-          String handlerEnd_i =
-              traceProcessor
-                  .handlerEvents
-                  .get(rcv_i)
-                  .get(traceProcessor.handlerEvents.get(rcv_i).size() - 1)
-                  .toString();
-          String handlerBegin_j = traceProcessor.handlerEvents.get(rcv_j).get(0).toString();
-          String handlerEnd_j =
-              traceProcessor
-                  .handlerEvents
-                  .get(rcv_j)
-                  .get(traceProcessor.handlerEvents.get(rcv_j).size() - 1)
-                  .toString();
-
-          String mutexConst =
-              solver.cOr(
-                  solver.cLt(handlerEnd_i, handlerBegin_j),
-                  solver.cLt(handlerEnd_j, handlerBegin_i));
-          solver.writeConst(solver.postNamedAssert(mutexConst, TAG));
-        }
-      }
+      outerOr.append(solver.cAnd(rcvHndLinkage));
     }
 
-    /* encode possible message arrival order constraints, which state that each RCV event may be
-     * "matched with" any message on the same socket */
-    for (HashSet<SocketEvent> rcvSet : rcvPerThread.values()) {
-      // for all RCVi in rcvSet :
-      // (RCVi < HNDBegin_i && HNDEnd_i < nextEvent) V (RCVi < HNDBegin_j && HNDEnd_j < nextEvent),
-      // for all j != i
-      for (SocketEvent rcv_i : rcvSet) {
-        Event nextEvent = rcvNextEvent.get(rcv_i);
-
-        // if the RCV is the last event, then nextEvent == null
-        if (nextEvent == null) {
-          continue;
-        }
-
-        StringBuilder outerOr = new StringBuilder();
-        for (SocketEvent rcv_j : rcvSet) {
-          String handlerBegin_j = traceProcessor.handlerEvents.get(rcv_j).get(0).toString();
-          String handlerEnd_j =
-              traceProcessor
-                  .handlerEvents
-                  .get(rcv_j)
-                  .get(traceProcessor.handlerEvents.get(rcv_j).size() - 1)
-                  .toString();
-          String innerAnd =
-              solver.cLt(
-                  rcv_i.toString()
-                      + " "
-                      + handlerBegin_j
-                      + " "
-                      + handlerEnd_j
-                      + " "
-                      + nextEvent.toString());
-          outerOr.append(innerAnd + " ");
-        }
-        solver.writeConst(solver.postNamedAssert(solver.cOr(outerOr.toString()), TAG));
-      }
-    }
+    solver.writeConst(solver.postNamedAssert(solver.cOr(outerOr.toString()), TAG));
   }
 
   private void genForkStartConstraints() throws IOException {
