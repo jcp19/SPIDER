@@ -49,7 +49,7 @@ public class CheckerParallel {
     if (cmd.hasOption("r")) {
       RedundantEventPruner eventPruner = new RedundantEventPruner(trace);
       Stats.INSTANCE.redundantEvents = eventPruner.removeRedundantRW();
-      Stats.INSTANCE.redundantMsgEvents = eventPruner.removeRedundantInterThreadEvents();
+      Stats.INSTANCE.redundantMsgEvents = eventPruner.removeRedundantBlocks();
     }
 
     Z3SolverParallel solver;

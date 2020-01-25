@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pt.haslab.taz.TraceProcessor;
 import pt.haslab.taz.causality.CausalPair;
-import pt.haslab.taz.causality.MessageCausalPair;
 import pt.haslab.taz.events.Event;
 import pt.haslab.taz.events.EventIterator;
 import pt.haslab.taz.events.EventType;
@@ -133,25 +132,22 @@ public class RedundantEventPruner {
   }
 
   private Stack<String> getStack(String loc, Set<String> concurrencyContext) {
-    Set<String> concurrencyHistory = concurrencyHistories
-        .computeIfAbsent(loc, k -> new HashSet<>());
+    concurrencyHistories.computeIfAbsent(loc, k -> new HashSet<>());
 
     // If a statement can produce more than one event, than this line shoudld change.
     // The key should be extended with some string which can differentiate between events
     // produced on the same statement.
     String key = "loc:" + loc + ":" + concurrencyContext.hashCode();
-    Stack<String> stack = stacks.computeIfAbsent(key, k -> new Stack<>());
 
-    return stack;
+    return stacks.computeIfAbsent(key, k -> new Stack<>());
   }
 
   /**
-   * Generalize ReX algorithm to distributed systems, making it capable of pruning SND and RCV
-   * events. For maximum effectiveness, this mehtod should be run after `removeRedundantRW`.
+   * Removes redundant message handlers and redundant message handlers as defined in SPIDER's paper
    *
    * @return the number of removed events
    */
-  public long removeRedundantInterThreadEvents() {
+  public long removeRedundantBlocks() {
     // can be optimized to check only once every part of the code
     Set<String> checkedThreads = new HashSet<>();
     Set<Event> redundantInterThreadEvents = new HashSet<>();

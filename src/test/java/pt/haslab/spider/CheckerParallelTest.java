@@ -32,8 +32,4 @@ class CheckerParallelTest {
     assertEquals(concatList, expectedResult);
   }
 
-  @Test
-  void testSortedSetToList() {
-    // TODO
-  }
 }
