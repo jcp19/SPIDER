@@ -1,10 +1,14 @@
-BEGIN {}
+BEGIN {
+    results["data_races_from_msg"]="0"
+}
+
 {
   # Fields needed:
   # - #removed events (RW + IT) (Redundant RW %),
   # - #contraints(R),
   # - #msg-msg race candidates(R),
   # - #actual msg-msg race candidates(R),
+  # - #data races from msg-races
   # - time to check candidates(R)
   if (match($0, "Number of redundant events in trace:[[:blank:]]*([[:digit:]]*)", res)) {
     results["redundant_events_rw"]=res[1];
@@ -33,13 +37,12 @@ BEGIN {}
   if (match($0, "Time to check all message race candidates:[[:blank:]]*([[:digit:]]*.[[:digit:]]*[[:blank:]]*seconds)", res)) {
     results["time"]=res[1]
   }
+
+  if (match($0, "#Data Races from Message Races:[[:blank:]]*([[:digit:]]*)", res)) {
+    results["data_races_from_msg"]=res[1]
+  }
 }
 
-# - #removed events (RW + IT) (Redundant RW %),
-# - #contraints(R),
-# - #msg-msg race candidates(R),
-# - #actual msg-msg race candidates(R),
-# - time to check candidates(R)
 END {
-  printf("\"(%s + %s) (%s)\",\"%s\",\"%s\",\"%s\",\"%s\"", results["redundant_events_rw"], results["redundant_events_it"], results["percentage_redundant_rw_events"], results["num_constraints"], results["number_candidates"], results["number_actual"], results["time"]);
+  printf("\"(%s + %s) (%s)\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"", results["redundant_events_rw"], results["redundant_events_it"], results["percentage_redundant_rw_events"], results["num_constraints"], results["number_candidates"], results["number_actual"], results["data_races_from_msg"], results["time"]);
 }
