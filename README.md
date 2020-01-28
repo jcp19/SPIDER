@@ -12,20 +12,6 @@ Automated distributed data race detection from distributed logs via SMT constrai
 <a href="https://github.com/jcp19/Minha-checker/issues">Request Feature</a>
 </p></p>
 
-## Table of Contents
-
-* [About the Project](#about-the-project)
-* [Getting Started](#getting-started)
-  * [Prerequisites](#prerequisites)
-  * [Installation](#installation)
-* [Usage](#usage)
-  * [Tracing your target]()
-  * [Runing SPIDER]()
-  * [A brief example]()
-* [Roadmap](#roadmap)
-* [Contact](#contact)
-* [Acknowledgements](#acknowledgements)
-
 ## About The Project
 Data races [have been shown](https://ucare.cs.uchicago.edu/pdf/asplos16-TaxDC.pdf) to be a frequent source of distributed concurrency bugs in major distributed programs.
 They occur when two memory accesses to the same variable (where at least one of them is a *write*) are concurrent
@@ -39,21 +25,21 @@ and thus, their relative order is unpredictable: if two memory accesses `A` and 
 In order to compile SPIDER on your machine, you first need to have the following packages installed:
 - [z3](https://github.com/Z3Prover/z3) in your PATH
 - [falcon-taz](https://github.com/fntneves/falcon/tree/master/falcon-taz) - the easiest way to obtain falcon-taz is to follow these steps:
-```sh
+```bash
 # 1. clone the repo
-git clone git@github.com:fntneves/falcon.git
+$ git clone git@github.com:fntneves/falcon.git
 
 # 2. change directory to the falcon-taz folder
-cd falcon/falcon-taz
+$ cd falcon/falcon-taz
 
 # 3. install the package using Maven
-mvn install
+$ mvn install
 ```
 
 ### Building SPIDER
-```sh
+```bash
 # 1. clone this repo
-git clone git@github.com:jcp19/SPIDER.git
+$ git clone git@github.com:jcp19/SPIDER.git
 
 # 2. build a jar using Maven
 $ mvn package
