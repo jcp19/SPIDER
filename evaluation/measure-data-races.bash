@@ -2,8 +2,8 @@
 
 CSV_OUTPUT_FILE='data_race_results.csv'
 CSV_HEADER='"Test Case", "#events in the trace", "#contraints", "#data race candidates", "#data race candidate locations", "#actual data races", "#actual data race locations", "time to check candidates", "#removed events (RW + Others) (Redundant RW %)", "#contraints(R)", "#data race candidates (R)", "#data race candidate locations(R)", "#actual data races(R)", "#actual data race locations(R)", "time to check candidates(R)"'
-#FOLDERS_WITH_TRACES=('../traces/micro-benchmarks' '../traces/cyclon-spider')
-FOLDERS_WITH_TRACES=('../traces/micro-benchmarks')
+FOLDERS_WITH_TRACES=('../traces/micro-benchmarks' '../traces/cyclon-spider')
+#FOLDERS_WITH_TRACES=('../traces/micro-benchmarks')
 TIMEOUT='2h'
 OUTPUTS_FOLDER="program_outputs/data_race_detection/"
 

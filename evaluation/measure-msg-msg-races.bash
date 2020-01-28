@@ -2,9 +2,9 @@
 
 CSV_OUTPUT_FILE='msg_msg_race_results.csv'
 CSV_HEADER='Test Case, #events in the trace, #contraints, #msg-msg race candidates, #actual msg-msg race candidates, #Data races from msg races, time to check candidates, #removed events (RW + Others) (Redundant RW %), #contraints(R), #msg-msg race candidates(R), #actual msg-msg race candidates(R), #Data races from msg races, time to check candidates(R)'
-#FOLDERS_WITH_TRACES=('../traces/micro-benchmarks' '../traces/cyclon-spider')
-FOLDERS_WITH_TRACES=('../traces/micro-benchmarks')
-TIMEOUT='60s'
+FOLDERS_WITH_TRACES=('../traces/micro-benchmarks' '../traces/cyclon-spider')
+#FOLDERS_WITH_TRACES=('../traces/micro-benchmarks')
+TIMEOUT='2h'
 OUTPUTS_FOLDER="program_outputs/msg_data_race_detection/"
 
 YELLOW='\033[1;33m'
