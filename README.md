@@ -32,7 +32,11 @@ $ git clone git@github.com:fntneves/falcon.git
 # 2. change directory to the falcon-taz folder
 $ cd falcon/falcon-taz
 
-# 3. install the package using Maven
+# 3. checkout the branch fix_message_handler (might not be
+#    needed in future versions of falcon-taz)
+$ git checkout fix_message_handler
+
+# 4. install the package using Maven
 $ mvn install
 ```
 
@@ -174,8 +178,6 @@ Data Race Candidates:
 -- (W_demos.Example1.counter_main@10.0.0.1_3@demos.Example1.main.7,
     W_demos.Example1.counter_Thread-1@10.0.0.1_5@demos.Example1.run.12)
 -- (R_demos.Example1.counter_main@10.0.0.1_4@demos.Example1.main.8,
-    W_demos.Example1.counter_main@10.0.0.1_3@demos.Example1.main.7)
--- (R_demos.Example1.counter_main@10.0.0.1_4@demos.Example1.main.8,
     W_demos.Example1.counter_Thread-1@10.0.0.1_5@demos.Example1.run.12)
 
 Actual Data Races:
@@ -192,7 +194,7 @@ Actual Data Races:
 > Time to generate constraint model:  0.001 seconds
 
 ## DATA RACES:
-> Number of data race candidates:     3
+> Number of data race candidates:     2
 > Number of actual data races:        2
 > Time to check all candidates:       0.007 seconds
 ```
@@ -200,7 +202,8 @@ SPIDER's output is structured in the following maner: after some logging message
 candidate pairs of events which form a data race.
 > Even though the candidate pairs look complicated, they are actually very easy to read - each element of the pair is an identifier of an event which starts with `W` if it is a *write* or with `R` if it is a *read* and is followed by the accessed variable, the thread where it occurs, the node where the thread is running and the line of code responsible for the event.
 
-A pair of events constitutes a candidate if both events access the same variable and at least one of them
+A pair of events constitutes a candidate if both events access the same variable from different threads
+and at least one of them
 is a *write*. After listing the candidate pairs, the output lists the actual data races, i.e. the candidate pairs
 whose events are **concurrent**. Finally, a brief summary is shown.
 
@@ -216,26 +219,23 @@ If you're more of a visual learner, you can look at the causality relation `<` a
 are the traced events and whose edges connect nodes `a` and `b` iff `a < b`. Thus, ignoring the actual
 identifiers for the events and threads, the causality relation for the `Example1` trace shown above
 looks like this:
+
 ![abstract causality relation of Example1](misc/example1.png)
 
 > this image was obtained in [Alloy](http://alloytools.org/) with [this model](misc/causality_model.als) of the causality relation.
 
-explicar o que é o numero de constraints
-Falar brevemente Smts
-por link para a minha tese e paper para quem quiser saber mais
-Basically, we build a causality relation, which you can see as a graph which
-has as nodes events and it has directed edges from a to b if event a must
-happen before event b. Visually, two events form a data race if there is not a path from a to b or the other way around (in the directed graph) and a and b are memory accesses to the same variable and either a or b is a write.
-TODO: por link para o modelo do alloy4fun http://alloy4fun.inesctec.pt com o modelo
-TODO: por link para o paper
-TODO: por alloy no repo
+Determining wether two events are concurrent can also be done "visually" - two events are concurrent if there
+is not a directed path in the graph that contains both events. For example, there's no directed path that goes
+through `Write0` and `Write1`. Thus, they are concurrent.
 
-- Explicar causalidade como relacao HB que é um [poset](), dizer que isto pode ser visto como um grafo em que
-os nodos sao X e ha uma aresta entre X e Y se ...
-- Modelo visual em alloy para a execução 1 (explicar que foi gerado com modelo de alloy e por link para o ficheiro no repo)
-- Ficheiro em modelo SMT-Lib para exemplo
-- If you want to know more about this, stay tuned for my master thesis and a paper that will be published very soon
-check this paper or my dissertation
+Internally, SPIDER builds the causality relation as a set of constraints
+([e.g. for Example1](misc/example1.smt2))
+and queries an SMT solver to decide if two memory accesses are concurrent given those constraints.
+
+**If you are curious and want to know more about this project
+(e.g. how we generate the constraints, benchmarks, etc),
+stay tuned for my Master's Thesis and
+our upcoming paper or send us a private message ;)**
 
 ## Roadmap
 See the [open issues](https://github.com/jcp19/SPIDER/issues) for a list of proposed features and known issues.
@@ -246,6 +246,6 @@ SPIDER was developed by
 - [João Pereira](http://joaocpereira.me/) - [Twitter](https://twitter.com/joaopereira_19) - [GitHub](https://github.com/jcp19)
 
 ## Acknowledgements
-Besides, SPIDER couldn't be developed without the work that has been put into some great projects
+SPIDER couldn't be developed without the work that has been put into some great projects such as
 * [MINHA](https://github.com/jopereira/minha) by [José Orlando Pereira](https://www.inesctec.pt/en/people/jose-orlando-pereira#)
 * [Falcon](https://github.com/fntneves/falcon) by [Francisco Neves](https://www.inesctec.pt/pt/pessoas/francisco-teixeira-neves#)
