@@ -190,7 +190,7 @@ Actual Data Races:
         RESULTS
 =======================
 > Number of events in trace:          8
-> Number of constraints in model:     7
+> Number of constraints in model:     6
 > Time to generate constraint model:  0.001 seconds
 
 ## DATA RACES:
