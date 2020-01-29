@@ -27,26 +27,26 @@ In order to compile SPIDER on your machine, you first need to have the following
 - [falcon-taz](https://github.com/fntneves/falcon/tree/master/falcon-taz) - the easiest way to obtain falcon-taz is to follow these steps:
 ```bash
 # 1. clone the repo
-$ git clone git@github.com:fntneves/falcon.git
+git clone git@github.com:fntneves/falcon.git
 
 # 2. change directory to the falcon-taz folder
-$ cd falcon/falcon-taz
+cd falcon/falcon-taz
 
 # 3. checkout the branch fix_message_handler (might not be
 #    needed in future versions of falcon-taz)
-$ git checkout fix_message_handler
+git checkout fix_message_handler
 
 # 4. install the package using Maven
-$ mvn install
+mvn clean install
 ```
 
 ### Building SPIDER
 ```bash
 # 1. clone this repo
-$ git clone git@github.com:jcp19/SPIDER.git
+git clone git@github.com:jcp19/SPIDER.git
 
 # 2. build a jar using Maven
-$ mvn package
+mvn clean package
 ```
 
 After these commands, SPIDER will be available as a .jar in your `target/` folder.
@@ -62,7 +62,7 @@ way to trace your system at runtime - take a look at [Minha](https://github.com/
 ### Running SPIDER
 Having built the jar file, you can run it with a combination of the following command and flags:
 ```sh
-$ java -jar spider.jar
+java -jar spider.jar
  -d,--dataRaces          Check for data races.
  -f,--file <arg>         File containing the distributed trace.
  -m,--messageRaces       Check for message races.
@@ -163,7 +163,7 @@ Running this program with a tracing mechanism will produce a trace similar to [t
 We are now ready to run SPIDER with the flag `-d` to detect data races resulting from concurrent accesses in
 different threads, which will produce the following simplified output:
 ```bash
-$ java -jar spider.jar -d -f traces/Example1.log
+java -jar spider.jar -d -f traces/Example1.log
 [main] Loading events from traces/Example1.log
 [main] Trace successfully loaded!
 [RaceDetector] Generate program order constraints
