@@ -1,0 +1,21 @@
+ INFO [main] (TraceProcessor.java:134) - Loading events from ../traces/cyclon-spider/Cyclon_10N_100R.txt
+ERROR [main] (TraceProcessor.java:155) - Load as JSONArray failed. Try loading as file of JSONObjects
+ INFO [main] (TraceProcessor.java:199) - Trace successfully loaded!
+[MinhaChecker] Generate program order constraints
+[MinhaChecker] Generate fork-start constraints
+[MinhaChecker] Generate join-end constraints
+[MinhaChecker] Generate wait-notify constraints
+[MinhaChecker] Generate locking constraints
+[MinhaChecker] Generate communication constraints
+[MinhaChecker] Generate receive-handler linkage constraints according to the trace
+ INFO [main] (RaceDetector.java:75) - Time to generate constraint model: 0.923 seconds
+
+[MinhaChecker] Start data race checking (203000 candidates)
+[0] Started worker for batch [0, 25375]	(z3 process java.lang.UNIXProcess@3c833c08)
+[1] Started worker for batch [25375, 50750]	(z3 process java.lang.UNIXProcess@1dcd0e7c)
+[2] Started worker for batch [50750, 76125]	(z3 process java.lang.UNIXProcess@435ab699)
+[3] Started worker for batch [76125, 101500]	(z3 process java.lang.UNIXProcess@66b21ea5)
+[4] Started worker for batch [101500, 126875]	(z3 process java.lang.UNIXProcess@24528bb6)
+[5] Started worker for batch [126875, 152250]	(z3 process java.lang.UNIXProcess@656da3db)
+[6] Started worker for batch [152250, 177625]	(z3 process java.lang.UNIXProcess@ff58327)
+[7] Started worker for batch [177625, 203000]	(z3 process java.lang.UNIXProcess@2dbbed59)

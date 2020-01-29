@@ -1,0 +1,46 @@
+ INFO [main] (TraceProcessor.java:134) - Loading events from ../traces/cyclon-spider/Cyclon_100N_5R.txt
+ERROR [main] (TraceProcessor.java:155) - Load as JSONArray failed. Try loading as file of JSONObjects
+ INFO [main] (TraceProcessor.java:199) - Trace successfully loaded!
+[MinhaChecker] Generate program order constraints
+[MinhaChecker] Generate fork-start constraints
+[MinhaChecker] Generate join-end constraints
+[MinhaChecker] Generate wait-notify constraints
+[MinhaChecker] Generate locking constraints
+[MinhaChecker] Generate communication constraints
+[MinhaChecker] Generate receive-handler linkage constraints according to the trace
+ INFO [main] (RaceDetector.java:75) - Time to generate constraint model: 0.5 seconds
+
+[MinhaChecker] Start data race checking (6500 candidates)
+[0] Started worker for batch [0, 812]	(z3 process java.lang.UNIXProcess@3ce56f17)
+[1] Started worker for batch [812, 1624]	(z3 process java.lang.UNIXProcess@508f404b)
+[2] Started worker for batch [1624, 2436]	(z3 process java.lang.UNIXProcess@70170fb6)
+[3] Started worker for batch [2436, 3248]	(z3 process java.lang.UNIXProcess@497a030d)
+[4] Started worker for batch [3248, 4060]	(z3 process java.lang.UNIXProcess@734a16c4)
+[5] Started worker for batch [4060, 4872]	(z3 process java.lang.UNIXProcess@12b965b6)
+[7] Started worker for batch [5684, 6500]	(z3 process java.lang.UNIXProcess@7b2dbc82)
+[6] Started worker for batch [4872, 5684]	(z3 process java.lang.UNIXProcess@153b8775)
+
+#Data Race Candidates: 6500 | #Actual Data Races: 2394
+ > Data Race #1 : (cyclonlite.CyclonActive.insertReceivedToView.198, cyclonlite.CyclonActive.selectPeersToShuffle.249)
+
+=======================
+        RESULTS        
+=======================
+> Number of events in trace:		8401
+> Number of redundant events in trace:		0
+> Percentage of redundant RW events in trace:		00.00%
+> Number of redundant inter-thread events in trace:		0
+> Number of constraints in model:		9800
+
+## DATA RACES:
+  > Number of data race candidates:		6500
+  > Number of data race candidate locations:		3
+  > Number of actual data races:		2394
+  > Number of actual data race locations:		1
+  > Time to check all candidates:		173.313 seconds
+
+## MESSAGE RACES:
+  > Number of message race candidates:		0
+  > Number of actual message races:		0
+  > Time to check all message race candidates:		0.0 seconds
+
