@@ -18,7 +18,7 @@ They occur when two memory accesses to the same variable (where at least one of 
 and thus, their relative order is unpredictable: if two memory accesses `A` and `B` are concurrent, then
 `A` may occur before `B` or `B` may occur before `A`.
 
-*SPIDER* provides automated distributed data race detection via SMT constraint solving. It receives as input an event trace captured at runtime, and generates a happens-before model that encodes the causal relationships between the events. After building the constraint system, SPIDER resorts to *Z3*, an [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories), to check for data races. It is capable of detecting race conditions **even if no bug caused by race conditions manifests itself in the traced execution**. SPIDER was initially intended to be run alongside [*Minha*]() (in fact, it was originally named *Minha-Checker*) but it became an independent tool.
+*SPIDER* provides automated distributed data race detection via SMT constraint solving. It receives as input an event trace captured at runtime, and generates a happens-before model that encodes the causal relationships between the events. After building the constraint system, SPIDER resorts to *Z3*, an [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories), to check for data races. It is capable of detecting race conditions **even if no bug caused by race conditions manifests itself in the traced execution**. SPIDER was initially intended to be run alongside [*Minha*](https://github.com/jopereira/minha) (in fact, it was originally named *Minha-Checker*) but it became an independent tool.
 
 ## Getting Started
 ### Prerequisites
@@ -95,7 +95,7 @@ class Example1 implements Runnable {
 
 This is by no means a complex program (heck, it only runs two simple threads on a single node!) but
 it suffers from two data races - that's enough to demonstrate SPIDER's functionality.
-The two races in question occur between the between the instructions on lines 7 and 12 because the
+The two races in question occur between the instructions on lines 7 and 12 because the
 increments to the static variable `counter` are not synchronized
 and
 between the instructions on lines 8 and 12 because the increment operation on line 12 is not
@@ -170,7 +170,7 @@ $ java -jar spider.jar -d -f traces/Example1.log
 [RaceDetector] Generate communication constraints
 [RaceDetector] Generate message handling constraints
 
-Data Race candidates:
+Data Race Candidates:
 -- (W_demos.Example1.counter_main@10.0.0.1_3@demos.Example1.main.7,
     W_demos.Example1.counter_Thread-1@10.0.0.1_5@demos.Example1.run.12)
 -- (R_demos.Example1.counter_main@10.0.0.1_4@demos.Example1.main.8,
@@ -178,7 +178,7 @@ Data Race candidates:
 -- (R_demos.Example1.counter_main@10.0.0.1_4@demos.Example1.main.8,
     W_demos.Example1.counter_Thread-1@10.0.0.1_5@demos.Example1.run.12)
 
-#Data Race Candidates: 3 | #Actual Data Races: 2
+Actual Data Races:
 -- (W_demos.Example1.counter_main@10.0.0.1_3@demos.Example1.main.7,
     W_demos.Example1.counter_Thread-1@10.0.0.1_5@demos.Example1.run.12)
 -- (R_demos.Example1.counter_main@10.0.0.1_4@demos.Example1.main.8,
@@ -195,19 +195,28 @@ Data Race candidates:
 > Number of data race candidates:     3
 > Number of actual data races:        2
 > Time to check all candidates:       0.007 seconds
-
 ```
+SPIDER's output is structured in the following maner: after some logging messages, it presents the
+candidate pairs of events which form a data race.
+> Even though the candidate pairs look complicated, they are actually very easy to read - each element of the pair is an identifier of an event which starts with `W` if it is a *write* or with a `R` if it is a *read* and is followed by the accessed variable, the thread where it occurs, the node where the thread is running and the line of code responsible for the event.
 
-Explicar como interpretar o output, ver que o 2º @ nos eventos indica o local das instrucoes, o primeiro
-é o IP do nodo onde surgiu o erro, explicar o que é o numero de constraints, o que são os pares candidatos
+A pair of events constitutes a candidate if both events access the same variable and at least one of them
+is a *write*. After listing the candidate pairs, the output lists the actual data races, i.e. the candidate pairs
+whose events are **concurrent**. Finally, a brief summary is shown.
 
 ## How Does It Work?
+explicar o que é o numero de constraints
 Falar brevemente das race conditions, Smts e modelo HB
 por código aqui tb incluindo input e output e comandos invocados e trace e imagem do alloy
 por link para a minha tese e paper para quem quiser saber mais
 Basically, we build a causality relation, which you can see as a graph which
 has as nodes events and it has directed edges from a to b if event a must
 happen before event b. Visually, two events form a data race if there is not a path from a to b or the other way around (in the directed graph) and a and b are memory accesses to the same variable and either a or b is a write.
+
+
+TODO: por link para o modelo do alloy4fun http://alloy4fun.inesctec.pt com o modelo
+TODO: por link para o paper
+TODO: por alloy no repo
 
 - Explicar causalidade como relacao HB que é um [poset](), dizer que isto pode ser visto como um grafo em que
 os nodos sao X e ha uma aresta entre X e Y se ...
@@ -223,15 +232,10 @@ See the [open issues](https://github.com/jcp19/SPIDER/issues) for a list of prop
 
 ## Contact
 SPIDER was developed by
-- [Nuno Machado](pagina pessoal) - [@your_twitter](https://twitter.com/your_username) - email@example.com - github
-- [João Pereira](pagina pessoal) - [@your_twitter](https://twitter.com/your_username) - email@example.com - github
+- [Nuno Machado](https://www.inesctec.pt/en/people/nuno-almeida-machado) - [GitHub](https://github.com/nunomachado)
+- [João Pereira](http://joaocpereira.me/) - [Twitter](https://twitter.com/joaopereira_19) - [GitHub](https://github.com/jcp19)
 
 ## Acknowledgements
-Besides, SPIDER couldn't be developed without the great work of
-* [MINHA]() by [JOP]()
-* [Falcon]() by [Neves]()
-
-TODO: por tutorial da tese e por trace na pasta logs
-TODO: por link para o modelo do alloy4fun http://alloy4fun.inesctec.pt com o modelo
-TODO: por link para o paper
-TODO: por alloy no repo
+Besides, SPIDER couldn't be developed without the work that has been put into some great projects
+* [MINHA](https://github.com/jopereira/minha) by [José Orlando Pereira](https://www.inesctec.pt/en/people/jose-orlando-pereira#)
+* [Falcon](https://github.com/fntneves/falcon) by [Francisco Neves](https://www.inesctec.pt/pt/pessoas/francisco-teixeira-neves#)
