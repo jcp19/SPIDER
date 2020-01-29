@@ -90,7 +90,7 @@ class RaceDetector {
   public void computeActualDataRaces() {
     if (dataRaceCandidates.isEmpty()) {
       System.out.println(
-          "[MinhaChecker] No data races to check ("
+          "[RaceDetector] No data races to check ("
               + Stats.INSTANCE.totalDataRaceCandidates
               + " candidates)");
       return;
@@ -99,7 +99,7 @@ class RaceDetector {
     Stats.INSTANCE.totalDataRaceCandidates = dataRaceCandidates.size();
     Stats.INSTANCE.totalDataRaceCandidateLocations = countDataRaces();
     System.out.println(
-        "\n[MinhaChecker] Start data race checking ("
+        "\n[RaceDetector] Start data race checking ("
             + Stats.INSTANCE.totalDataRaceCandidates
             + " candidates)");
 
@@ -193,7 +193,7 @@ class RaceDetector {
   public void computeActualMsgRaces() {
     if (msgRaceCandidates.isEmpty()) {
       System.out.println(
-          "[MinhaChecker] No message races to check ("
+          "[RaceDetector] No message races to check ("
               + Stats.INSTANCE.totalMsgRaceCandidates
               + " candidates)");
       return;
@@ -202,7 +202,7 @@ class RaceDetector {
     Stats.INSTANCE.totalMsgRaceCandidates = msgRaceCandidates.size();
 
     System.out.println(
-        "\n[MinhaChecker] Start message race checking ("
+        "\n[RaceDetector] Start message race checking ("
             + Stats.INSTANCE.totalMsgRaceCandidates
             + " candidates)");
 
@@ -505,7 +505,7 @@ class RaceDetector {
    * @throws IOException
    */
   private void genProgramOrderConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate program order constraints");
+    System.out.println("[RaceDetector] Generate program order constraints");
     solver.writeComment("PROGRAM ORDER CONSTRAINTS");
     int max = 0;
     for (SortedSet<Event> l : traceProcessor.eventsPerThread.values()) {
@@ -545,7 +545,7 @@ class RaceDetector {
   }
 
   private void genSendReceiveConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate communication constraints");
+    System.out.println("[RaceDetector] Generate communication constraints");
     solver.writeComment("SEND-RECEIVE CONSTRAINTS");
     for (MessageCausalPair pair : traceProcessor.sndRcvPairs.values()) {
 
@@ -576,7 +576,7 @@ class RaceDetector {
    */
   private void genTraceMessageHandlingConstraints() throws IOException {
     System.out.println(
-        "[MinhaChecker] Generate receive-handler linkage constraints according to the trace");
+        "[RaceDetector] Generate receive-handler linkage constraints according to the trace");
     solver.writeComment("RECEIVE-HANDLER LINKAGE CONSTRAINTS");
     String TAG = "RCV_HND";
     for (Map.Entry<SocketEvent, List<Event>> handlerEvents : traceProcessor.handlerEvents
@@ -625,13 +625,13 @@ class RaceDetector {
 
         /* encode mutual exclusion constraints, which state that two message handlers in the same thread
     must occur one before the other in any order */
-    System.out.println("[MinhaChecker] Generate handler mutual exclusion constraints");
+    System.out.println("[RaceDetector] Generate handler mutual exclusion constraints");
     solver.writeComment("HANDLER MUTEX CONSTRAINTS");
     for (Set<Pair<String, String>> handlerSet : handlersPerThread.values()) {
       getHandlerMutexConstraints(handlerSet);
     }
 
-    System.out.println("[MinhaChecker] Generate receive-handler linkage constraints");
+    System.out.println("[RaceDetector] Generate receive-handler linkage constraints");
     solver.writeComment("RECEIVE-HANDLER LINKAGE CONSTRAINTS");
     // for each rcv, add assert with disjunction of rcv-handler linkages
     for (String threadSocket : rcvPerThread.keySet()) {
@@ -708,7 +708,7 @@ class RaceDetector {
   }
 
   private void genForkStartConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate fork-start constraints");
+    System.out.println("[RaceDetector] Generate fork-start constraints");
     solver.writeComment("FORK-START CONSTRAINTS");
     for (List<ThreadCreationEvent> l : traceProcessor.forkEvents.values()) {
       for (ThreadCreationEvent e : l) {
@@ -723,7 +723,7 @@ class RaceDetector {
   }
 
   private void genJoinExitConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate join-end constraints");
+    System.out.println("[RaceDetector] Generate join-end constraints");
     solver.writeComment("JOIN-END CONSTRAINTS");
     for (List<ThreadCreationEvent> l : traceProcessor.joinEvents.values()) {
       for (ThreadCreationEvent e : l) {
@@ -734,7 +734,7 @@ class RaceDetector {
   }
 
   private void genLockingConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate locking constraints");
+    System.out.println("[RaceDetector] Generate locking constraints");
     solver.writeComment("LOCKING CONSTRAINTS");
     for (String var : traceProcessor.lockEvents.keySet()) {
       // for two lock/unlock pairs on the same locking object,
@@ -771,7 +771,7 @@ class RaceDetector {
   }
 
   private void genWaitNotifyConstraints() throws IOException {
-    System.out.println("[MinhaChecker] Generate wait-notify constraints");
+    System.out.println("[RaceDetector] Generate wait-notify constraints");
     solver.writeComment("WAIT-NOTIFY CONSTRAINTS");
     // map: notify event -> list of all binary vars corresponding to that
     // notify
