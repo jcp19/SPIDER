@@ -220,7 +220,7 @@ are the traced events and whose edges connect nodes `a` and `b` iff `a < b`. Thu
 identifiers for the events and threads, the causality relation for the `Example1` trace shown above
 looks like this:
 
-![abstract causality relation of Example1](misc/example1.png)
+<center><img src="misc/example1.png" alt="abstract causality relation of Example1"></center>
 
 > this image was obtained in [Alloy](http://alloytools.org/) with [this model](misc/causality_model.als) of the causality relation.
 
