@@ -198,22 +198,34 @@ Actual Data Races:
 ```
 SPIDER's output is structured in the following maner: after some logging messages, it presents the
 candidate pairs of events which form a data race.
-> Even though the candidate pairs look complicated, they are actually very easy to read - each element of the pair is an identifier of an event which starts with `W` if it is a *write* or with a `R` if it is a *read* and is followed by the accessed variable, the thread where it occurs, the node where the thread is running and the line of code responsible for the event.
+> Even though the candidate pairs look complicated, they are actually very easy to read - each element of the pair is an identifier of an event which starts with `W` if it is a *write* or with `R` if it is a *read* and is followed by the accessed variable, the thread where it occurs, the node where the thread is running and the line of code responsible for the event.
 
 A pair of events constitutes a candidate if both events access the same variable and at least one of them
 is a *write*. After listing the candidate pairs, the output lists the actual data races, i.e. the candidate pairs
 whose events are **concurrent**. Finally, a brief summary is shown.
 
 ## How Does It Work?
+SPIDER builds a causality relation `<` between the traced events such that events `a` and `b`
+are related (`a < b`) if and only if `a` must occur before `b` in any execution of the system.
+
+> Note: `<` is in fact a [*poset*](https://en.wikipedia.org/wiki/Partially_ordered_set).
+
+Using `<`, it is possible to detect which candidate pairs of memory accesses are in fact concurrent -
+they are exactly the pairs of the form `(a,b)` such that neither `a < b` nor `b < a`.
+If you're more of a visual learner, you can look at the causality relation `<` as a directed graph whose nodes
+are the traced events and whose edges connect nodes `a` and `b` iff `a < b`. Thus, ignoring the actual
+identifiers for the events and threads, the causality relation for the `Example1` trace shown above
+looks like this:
+![abstract causality relation of Example1](misc/example1.png)
+
+> this image was obtained in [Alloy](http://alloytools.org/) with [this model](misc/causality_model.als) of the causality relation.
+
 explicar o que é o numero de constraints
-Falar brevemente das race conditions, Smts e modelo HB
-por código aqui tb incluindo input e output e comandos invocados e trace e imagem do alloy
+Falar brevemente Smts
 por link para a minha tese e paper para quem quiser saber mais
 Basically, we build a causality relation, which you can see as a graph which
 has as nodes events and it has directed edges from a to b if event a must
 happen before event b. Visually, two events form a data race if there is not a path from a to b or the other way around (in the directed graph) and a and b are memory accesses to the same variable and either a or b is a write.
-
-
 TODO: por link para o modelo do alloy4fun http://alloy4fun.inesctec.pt com o modelo
 TODO: por link para o paper
 TODO: por alloy no repo
@@ -222,8 +234,6 @@ TODO: por alloy no repo
 os nodos sao X e ha uma aresta entre X e Y se ...
 - Modelo visual em alloy para a execução 1 (explicar que foi gerado com modelo de alloy e por link para o ficheiro no repo)
 - Ficheiro em modelo SMT-Lib para exemplo
-- Como funciona, que condições sao geradas
-- explicar utilizacao dos smt solvers
 - If you want to know more about this, stay tuned for my master thesis and a paper that will be published very soon
 check this paper or my dissertation
 
