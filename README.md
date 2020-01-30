@@ -242,8 +242,8 @@ See the [open issues](https://github.com/jcp19/SPIDER/issues) for a list of prop
 
 ## Contact
 SPIDER was developed by
-- [Nuno Machado](https://www.inesctec.pt/en/people/nuno-almeida-machado) - [GitHub](https://github.com/nunomachado)
 - [João Pereira](http://joaocpereira.me/) - [Twitter](https://twitter.com/joaopereira_19) - [GitHub](https://github.com/jcp19)
+- [Nuno Machado](https://www.nunomachado.me) - [GitHub](https://github.com/nunomachado)
 
 ## Acknowledgements
 SPIDER couldn't be developed without the work that has been put into some great projects such as
