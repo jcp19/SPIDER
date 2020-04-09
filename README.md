@@ -234,7 +234,7 @@ and queries an SMT solver to decide if two memory accesses are concurrent given 
 
 **If you are curious and want to know more about this project
 (e.g. how we generate the constraints, benchmarks, etc)
-check out our [TAP 2020 paper](paper.pdf).**
+check out our [TAP 2020 paper (draft)](paper.pdf).**
 
 ## Roadmap
 See the [open issues](https://github.com/jcp19/SPIDER/issues) for a list of proposed features and known issues.
