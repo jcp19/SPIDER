@@ -233,9 +233,8 @@ Internally, SPIDER builds the causality relation as a set of constraints
 and queries an SMT solver to decide if two memory accesses are concurrent given those constraints.
 
 **If you are curious and want to know more about this project
-(e.g. how we generate the constraints, benchmarks, etc),
-stay tuned for my Master's Thesis and
-our upcoming paper or send us a private message ;)**
+(e.g. how we generate the constraints, benchmarks, etc)
+check out our [TAP 2020 paper](paper.pdf).**
 
 ## Roadmap
 See the [open issues](https://github.com/jcp19/SPIDER/issues) for a list of proposed features and known issues.
